@@ -2,13 +2,16 @@ pragma solidity ^0.8.1;
 
 import "contracts/Lien/ILien.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Lien is ILien {
 
+    using SafeMath for uint256;
+
     address private provider;
     address private tokenAddr;
-    uint256 private value;
+    uint256 public value;
 
     event LienIncreased(uint256 amount);
     event LienDecreased(uint256 amount);
@@ -96,7 +99,8 @@ contract Lien is ILien {
      *      Emits an event that the lien increased
      */
     function increaseLien(uint256 amount) internal {
-        value += amount;
+        (bool work, uint256 num) = value.tryAdd(amount);
+        value = num;
         emit LienIncreased(amount);
     }
 

@@ -12,6 +12,59 @@ function sleep(ms) {
 const txFeePerGas = '199999946752';
 const storageByteDeposit = '100000000000000';
 
+
+// describe("VerifySignature", function () {
+//   it("Check signature", async function () {
+//     const accounts = await ethers.getSigners(2)
+
+//     const blockNumber = await ethers.provider.getBlockNumber();
+//     const ethParams = calcEthereumTransactionParams({
+//         gasLimit: '21000010',
+//         validUntil: (blockNumber + 100000).toString(),
+//         storageLimit: '640010',
+//         txFeePerGas,
+//         storageByteDeposit
+//     });
+
+//     const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract")
+//     let contract
+//     if (hre.network.name == "mandala") {
+//         contract = await ESCROW_FACTORY.deploy(accounts[1].address, {
+//                 gasPrice: ethParams.txGasPrice,
+//                 gasLimit: ethParams.txGasLimit,
+//                 });
+//     } else {
+//         contract = await ESCROW_FACTORY.deploy(accounts[1].address);
+//     }
+//     await contract.deployed()
+
+//     // const PRIV_KEY = "0x..."
+//     // const signer = new ethers.Wallet(PRIV_KEY)
+//     const signer = accounts[0]
+
+//     let name = "bc99422d9e0abdd8ab52ce43a39333e401a87a9afa547572ea407e5699240479" // keccak-256("John")
+//     let nft_lease_hash = "36477c30b09e7a21f574222006ba0a2dde4aeef24f036bba439dc1494444a4d1" // keccak-256("This is the nft lease hashed")
+
+//     const hash = await contract.getMessageHash(signer.address, name, nft_lease_hash)
+//     const sig = await signer.signMessage(ethers.utils.arrayify(hash))
+
+//     const ethHash = await contract.getEthSignedMessageHash(hash)
+
+//     console.log("signer          ", signer.address)
+//     console.log("recovered signer", await contract.recoverSigner(ethHash, sig))
+
+//     // Correct signature and message returns true
+//     expect(
+//       await contract.verify(signer.address, name, sig)
+//     ).to.equal(true)
+
+//     // Incorrect message returns false
+//     expect(
+//       await contract.verify(signer.address, to, amount + 1, message, nonce, sig)
+//     ).to.equal(false)
+//   })
+// })
+
 // Tests should be ran on localhost test network
 // Run command `npx hardhat test --network localhost` to test this code
 describe("ZyftySalesContract", function () {
@@ -21,7 +74,7 @@ describe("ZyftySalesContract", function () {
         this.tokenBalance = 300;
         this.time = 5;
         if (hre.network.name == "mandala" || hre.network.name == "matic") {
-            this.time = 120;
+            this.time = 60;
         }
         this.price = 200;
         this.id = 1;
@@ -125,7 +178,7 @@ describe("ZyftySalesContract", function () {
 
     it("Reverts seller escrow", async function() {
         await expect(this.sellerConn.revertSeller(this.id)).to.be.reverted;
-        await sleep((this.time + 20)*1000); // Wait for timeout
+        await sleep((this.time*2)*1000); // Wait for timeout
         // Ensure this fails
         await expect(this.buyerConn.revertSeller(this.id)).to.be.reverted;
 
@@ -145,7 +198,7 @@ describe("ZyftySalesContract", function () {
         await r.wait();
         // expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
         await expect(this.buyerConn.revertBuyer(this.id)).to.be.revertedWith("Window is still open");
-        await sleep((this.time + 20)*1000);
+        await sleep((this.time*2)*1000);
         // Ensure this fails
         await expect(this.sellerConn.revertBuyer(this.id)).to.be.reverted;
         r = await this.buyerConn.revertBuyer(this.id);
@@ -181,3 +234,4 @@ describe("ZyftySalesContract", function () {
     // False hash
 
 });
+

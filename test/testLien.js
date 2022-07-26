@@ -27,8 +27,8 @@ describe("Lien Contracts", function () {
         this.tokenBalance = 50;
         this.lienValue = 10;
         this.period = 5; // Every 5 seconds
-        if (hre.network.name == "mandala" || hre.network.name == "matic") {
-            this.period = 20;
+        if (hre.network.name == "mandala" || hre.network.name == "matic" || hre.network.name == "mandalaNet" ) {
+            this.period = 5; // for testing purposes, it should fail
         }
 
         const blockNumber = await ethers.provider.getBlockNumber();
@@ -40,7 +40,7 @@ describe("Lien Contracts", function () {
             storageByteDeposit
         });
 
-        if (hre.network.name == "mandala") {
+        if (hre.network.name == "mandala"|| hre.network.name == "mandalaNet" ) {
             this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.provider.address, this.buyer.address, this.tokenBalance, {
                     gasPrice: ethParams.txGasPrice,
                     gasLimit: ethParams.txGasLimit,
@@ -60,6 +60,7 @@ describe("Lien Contracts", function () {
                     gasLimit: ethParams.txGasLimit,
                     }
             );
+            this.startTimeStamp = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
         } else {
             this.token = await TOKEN_FACTORY.deploy(this.ot.address, this.provider.address, this.buyer.address, this.tokenBalance);
             this.lienStatic = await LIEN_FACTORY.deploy(this.provider.address, this.lienValue, this.token.address);
@@ -71,6 +72,7 @@ describe("Lien Contracts", function () {
                 this.lienValue,
                 this.period
             );
+            this.startTimeStamp = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
         }
 
         this.buyerStatic = this.lienStatic.connect(this.buyer);
@@ -120,22 +122,31 @@ describe("Lien Contracts", function () {
 
     it("Tests parametric lien updates value", async function() {
         expect(await this.buyerParametric.balanceView()).to.equal(0);
-        await sleep((this.period + 2)*1000);
+        await this.token.connect(this.buyer).approve(this.lienParametric.address, 1);
+        await sleep((this.period)*1000);
         // Balance should not automatically be updated
-        expect(await this.buyerParametric.balanceView()).to.equal(0);
-        let r = await this.buyerParametric.update();
-        await r.wait();
-        expect(await this.buyerParametric.balanceView()).to.equal(this.lienValue);
+        // let r = await this.buyerParametric.balance();
+        // await r.wait();
+        await this.buyerParametric.pay(0);
+        // Get the most recently mined block
+        const timeNow = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
+        let totalP = Math.floor((timeNow - this.startTimeStamp) / this.period);
+        expect(await this.buyerParametric.balanceView()).to.equal(totalP*this.lienValue);
     });
 
     it("Tests parametric lien updates on pay", async function() {
         expect(await this.lienParametric.balanceView()).to.equal(0);
         await this.token.connect(this.buyer).approve(this.lienParametric.address, this.tokenBalance);
         // wait 2 periods, value should be lienValue*2
-        await sleep((this.period*2 + 2)*1000);
+        await sleep((this.period*2)*1000);
         await this.buyerParametric.pay(this.tokenBalance);
 
-        expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.lienValue*2);
+        const timeNow = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
+        let totalP = Math.floor((timeNow - this.startTimeStamp) / this.period);
+
+        let cost = totalP*this.lienValue;
+        expect(await this.buyerParametric.balanceView()).to.equal(0);
+        expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - cost);
     });
 
 });

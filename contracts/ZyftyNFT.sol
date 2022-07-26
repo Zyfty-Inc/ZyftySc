@@ -1,4 +1,5 @@
 pragma solidity ^0.8.1;
+// SPDX-License-Identifier: MIT
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -23,7 +24,7 @@ contract ZyftyNFT is ERC721, Ownable {
         address primaryLien; // id 0
         address proposedLien;
         string tokenURI;
-        bytes32 _leaseHash;
+        string _leaseHash;
     }
 
     mapping(uint256 => Account) accounts;
@@ -44,7 +45,7 @@ contract ZyftyNFT is ERC721, Ownable {
         escrow = _escrow;
     }
     
-    function mint(address recipient, string memory meta_data_uri, address _primaryLien, bytes32 lease_hash)
+    function mint(address recipient, string memory meta_data_uri, address _primaryLien, string memory lease_hash)
         public
         returns(uint256)
         {

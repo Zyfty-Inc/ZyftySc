@@ -39,8 +39,7 @@ describe("RealEstateNFT", function () {
         this.lien1Val = 10;
         this.otherLienValue = 5;
 
-
-        if (hre.network.name == "mandala") {
+        if (hre.network.name == "mandala" || hre.network.name == "mandalaNet") {
             this.nft = await NFT_FACTORY.deploy(this.escrow.address, {
                 gasPrice: ethParams.txGasPrice,
                 gasLimit: ethParams.txGasLimit,

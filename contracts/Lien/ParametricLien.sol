@@ -7,7 +7,7 @@ contract ParametricLien is Lien {
     uint256 lastUpdated;
     uint256 valuePer;
     uint256 period;
-    uint256 start;
+    uint256 public start;
 
     constructor(address lienProvider,
                 address assetType,
@@ -30,6 +30,7 @@ contract ParametricLien is Lien {
      */
     function initialize() public virtual override {
         start = block.timestamp;
+        lastUpdated = block.timestamp;
     }
 
     function update() public virtual override {
