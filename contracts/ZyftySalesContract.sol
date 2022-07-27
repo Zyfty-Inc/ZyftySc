@@ -191,7 +191,7 @@ contract ZyftySalesContract is Ownable {
     }
 
     modifier inState(uint256 id, EscrowState state) {
-        require(propertyListing[id].state == state);
+        require(propertyListing[id].state == state, "Not in the correct state");
         _;
     }
 
