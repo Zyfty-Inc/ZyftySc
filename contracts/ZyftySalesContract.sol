@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import "hardhat/console.sol";
 
@@ -22,6 +23,7 @@ contract TestToken is ERC20 {
 
 contract ZyftySalesContract is Ownable {
     using Counters for Counters.Counter;
+    using ECDSA for bytes32;
     Counters.Counter private _propertyIds;
 
     enum EscrowState {
@@ -97,13 +99,17 @@ contract ZyftySalesContract is Ownable {
     }
 
     // hash identifying_info_hash, nft_physical_contract_hash signature 
-    function buyProperty(uint256 id, string memory lease_contract_hash)
+    function buyProperty(uint256 id, bytes memory agreementSignature)
         public
         inState(id, EscrowState.INITIALIZED)
         withinWindow(id)
         {
-        // bytes32 messageHash = keccak256(abi.encode("\x19The following address agrees to this lease hash:\n32", msg.sender, nft.leaseHash()));
-        // require(messageHash == lease_contract_hash);
+        ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
+        address signedAddress = createAgreementHash(nft.leaseHash(propertyListing[id].tokenID))
+                                    .toEthSignedMessageHash()
+                                    .recover(agreementSignature);
+
+        require(signedAddress == msg.sender, "Incorrect Signature");
         require(propertyListing[id].buyer == address(0) || msg.sender == propertyListing[id].buyer, "You are not authorized to buy this");
         IERC20 token = IERC20(propertyListing[id].asset);
 
@@ -112,6 +118,7 @@ contract ZyftySalesContract is Ownable {
         propertyListing[id].buyerPaid = true;
         propertyListing[id].buyer = msg.sender;
     }
+
 
     function revertSeller(uint256 id)
         public
@@ -200,63 +207,10 @@ contract ZyftySalesContract is Ownable {
     }
 
     // Functions to verify hash signature
-    function getMessageHash(
-        address signer,
-        string memory name, // Name hash
-        string memory nft_lease_hash
+    function createAgreementHash(
+        string memory nftLeaseHash
     ) public view returns (bytes32) {
-        return keccak256(abi.encodePacked(signer, name, nft_lease_hash));
-    }
-
-    function getEthSignedMessageHash(bytes32 _messageHash)
-        public
-        view
-        returns (bytes32)
-    {
-        return
-            keccak256(
-                abi.encodePacked("\x19The address+name agrees to the lease hash:\n32", _messageHash)
-            );
-    }
-
-    function verify(
-        address _signer,
-        string memory name,
-        string memory nft_lease_hash,
-        bytes memory signature
-    ) public view returns (bool) {
-        bytes32 messageHash = getMessageHash(_signer, name, nft_lease_hash);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);
-
-        return recoverSigner(ethSignedMessageHash, signature) == _signer;
-    }
-
-    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature)
-        public
-        view
-        returns (address)
-    {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-
-        return ecrecover(_ethSignedMessageHash, v, r, s);
-    }
-
-    function splitSignature(bytes memory sig)
-        public
-        view
-        returns (
-            bytes32 r,
-            bytes32 s,
-            uint8 v
-        )
-    {
-        require(sig.length == 65, "invalid signature length");
-
-        assembly {
-            r := mload(add(sig, 32))
-            s := mload(add(sig, 64))
-            v := byte(0, mload(add(sig, 96)))
-        }
+        return keccak256(abi.encode("The following address agrees to this lease hash:", msg.sender, nftLeaseHash));
     }
 
 }

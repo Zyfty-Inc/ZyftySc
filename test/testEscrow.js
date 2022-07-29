@@ -9,6 +9,8 @@ function sleep(ms) {
   });
 }
 
+
+
 const txFeePerGas = '199999946752';
 const storageByteDeposit = '100000000000000';
 
@@ -31,11 +33,14 @@ describe("ZyftySalesContract", function () {
         [this.seller, this.buyer, this.lien1P, this.zyftyAdmin] = await ethers.getSigners();
     });
 
+
     beforeEach(async function() { 
         // for logging
         const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract");
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
         const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT");
+
+        let leaseHash = "lease-hash"
 
         const blockNumber = await ethers.provider.getBlockNumber();
         const ethParams = calcEthereumTransactionParams({
@@ -77,7 +82,7 @@ describe("ZyftySalesContract", function () {
             this.seller.address,
             metadataURI,
             this.lien.address,
-            "lease-hash"
+            leaseHash
         );
         await r.wait()
 
@@ -100,8 +105,14 @@ describe("ZyftySalesContract", function () {
         this.startTimeStamp = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
     });
 
+    createHash = async (es, user, leaseAgreement) => {
+        const hash = await es.connect(user).createAgreementHash(leaseAgreement);
+        const sig = await user.signMessage(ethers.utils.arrayify(hash))
+        return sig;
+    }
+
     it("Executes escrow succesfully", async function() {
-        let hash = ""
+        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
         expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
 
@@ -147,7 +158,7 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Reverts buyer escrow", async function() {
-        let hash = ""
+        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
         await this.token.connect(this.buyer).approve(this.escrow.address, this.price);
 
         let r = await this.buyerConn.buyProperty(this.id, hash);
@@ -176,7 +187,7 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Pays off primary lien account on Transfer", async function() {
-        let hash = ""
+        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
         let r = await this.buyerConn.buyProperty(this.id, hash)
         await r.wait()
 
@@ -191,13 +202,29 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Reverts execute when proceeds don't cover lien payments", async function() {
-        let hash = ""
+        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
         let r = await this.buyerConn.buyProperty(this.id, hash)
         await r.wait();
         await expect(this.sellerConn.execute(this.id)).to.be.reverted;
     });
 
-    // False hash
+    it("Fails buy when signed by the wrong person", async function() {
+        let hash = await createHash(this.escrow, this.seller, await this.nft.leaseHash(this.id)) // wrong address
+        expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
+        expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
+
+        expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance);
+        await expect(this.buyerConn.buyProperty(this.id, hash)).to.be.revertedWith("Incorrect Signature");
+    });
+
+    it("Fails buy when incorrect hash", async function() {
+        let hash = await createHash(this.escrow, this.buyer, "not-the-lease-hash") // wrong address
+        expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
+        expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
+
+        expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance);
+        await expect(this.buyerConn.buyProperty(this.id, hash)).to.be.revertedWith("Incorrect Signature");
+    });
 
 });
 
