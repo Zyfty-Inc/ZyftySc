@@ -42,7 +42,7 @@ contract ZyftySalesContract is Ownable {
         address seller;
         address buyer;
         uint256 time; // seconds
-        address asset; // do both
+        address asset;
         uint256 price;
         uint256 created;
 
@@ -105,7 +105,7 @@ contract ZyftySalesContract is Ownable {
         withinWindow(id)
         {
         ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
-        address signedAddress = createAgreementHash(nft.leaseHash(propertyListing[id].tokenID))
+        address signedAddress = nft.createAgreementHash(propertyListing[id].tokenID, msg.sender)
                                     .toEthSignedMessageHash()
                                     .recover(agreementSignature);
 
@@ -206,11 +206,13 @@ contract ZyftySalesContract is Ownable {
         return propertyListing[id];
     }
 
+    // TODO: move this to NFT
     // Functions to verify hash signature
     function createAgreementHash(
+        string memory prepend,
         string memory nftLeaseHash
     ) public view returns (bytes32) {
-        return keccak256(abi.encode("The following address agrees to this lease hash:", msg.sender, nftLeaseHash));
+        return keccak256(abi.encode(prepend, msg.sender, nftLeaseHash));
     }
 
 }

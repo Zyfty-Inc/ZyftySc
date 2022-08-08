@@ -25,6 +25,7 @@ contract ZyftyNFT is ERC721, Ownable {
         address proposedLien;
         string tokenURI;
         string _leaseHash;
+        string _sigMessage;
     }
 
     mapping(uint256 => Account) accounts;
@@ -45,7 +46,7 @@ contract ZyftyNFT is ERC721, Ownable {
         escrow = _escrow;
     }
     
-    function mint(address recipient, string memory meta_data_uri, address _primaryLien, string memory lease_hash)
+    function mint(address recipient, string memory meta_data_uri, address _primaryLien, string memory lease_hash, string memory signMessage)
         public
         returns(uint256)
         {
@@ -60,10 +61,28 @@ contract ZyftyNFT is ERC721, Ownable {
             primaryLien: _primaryLien,
             proposedLien: address(0),
             tokenURI: meta_data_uri,
-            _leaseHash: lease_hash
+            _leaseHash: lease_hash,
+            _sigMessage: signMessage
         });
         
         return newItemId;
+    }
+
+    function setSignMessage(uint256 tokenId, string memory newMessage) public {
+        Account storage acc = accounts[tokenId];
+        require(msg.sender == ownerOf(tokenId) || msg.sender == ILien(lien(tokenId)).lienProvider(), "You do not have access to change the agreement message");
+        acc._sigMessage = newMessage;
+    }
+
+    /**
+     * @dev Creates an agreement hash for tokenID, with address addr
+     */
+    function createAgreementHash(uint256 tokenId, address addr)
+        public
+        view
+        returns(bytes32) {
+        Account memory acc = accounts[tokenId];
+        return keccak256(abi.encode(acc._sigMessage, addr, acc._leaseHash, tokenId, address(this)));
     }
 
     /**

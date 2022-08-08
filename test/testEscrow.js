@@ -27,6 +27,7 @@ describe("ZyftySalesContract", function () {
         }
         this.price = 200;
         this.id = 1;
+        this.idOther = 2;
         this.LIEN_FACTORY = await hre.ethers.getContractFactory("Lien");
         this.lienVal = 0;
 
@@ -77,12 +78,24 @@ describe("ZyftySalesContract", function () {
         }
 
         metadataURI = "cid/test.json";
+        let sigMessage = "The following address agrees to the lease"
 
         let r = await this.nft.connect(this.seller).mint(
             this.seller.address,
             metadataURI,
             this.lien.address,
-            leaseHash
+            leaseHash,
+            sigMessage
+        );
+        await r.wait()
+
+        // mint a second one for fake signing
+        r = await this.nft.connect(this.seller).mint(
+            this.zyftyAdmin.address,
+            metadataURI,
+            this.lien.address,
+            leaseHash,
+            sigMessage
         );
         await r.wait()
 
@@ -105,14 +118,14 @@ describe("ZyftySalesContract", function () {
         this.startTimeStamp = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
     });
 
-    createHash = async (es, user, leaseAgreement) => {
-        const hash = await es.connect(user).createAgreementHash(leaseAgreement);
+    createHash = async (nft, user, nftId) => {
+        const hash = await nft.connect(user).createAgreementHash(nftId, user.address);
         const sig = await user.signMessage(ethers.utils.arrayify(hash))
         return sig;
     }
 
     it("Executes escrow succesfully", async function() {
-        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
+        let hash = await createHash(this.nft, this.buyer, this.id)
         expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
 
@@ -158,7 +171,7 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Reverts buyer escrow", async function() {
-        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
+        let hash = await createHash(this.nft, this.buyer, this.id);
         await this.token.connect(this.buyer).approve(this.escrow.address, this.price);
 
         let r = await this.buyerConn.buyProperty(this.id, hash);
@@ -187,7 +200,7 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Pays off primary lien account on Transfer", async function() {
-        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
+        let hash = await createHash(this.nft, this.buyer, this.id)
         let r = await this.buyerConn.buyProperty(this.id, hash)
         await r.wait()
 
@@ -202,14 +215,15 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Reverts execute when proceeds don't cover lien payments", async function() {
-        let hash = await createHash(this.escrow, this.buyer, await this.nft.leaseHash(this.id))
+        let hash = await createHash(this.nft, this.buyer, this.id)
         let r = await this.buyerConn.buyProperty(this.id, hash)
         await r.wait();
         await expect(this.sellerConn.execute(this.id)).to.be.reverted;
     });
 
     it("Fails buy when signed by the wrong person", async function() {
-        let hash = await createHash(this.escrow, this.seller, await this.nft.leaseHash(this.id)) // wrong address
+        // Wrong signer
+        let hash = await createHash(this.nft, this.seller, this.id)
         expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
 
@@ -218,7 +232,8 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Fails buy when incorrect hash", async function() {
-        let hash = await createHash(this.escrow, this.buyer, "not-the-lease-hash") // wrong address
+        // Wrong message
+        let hash = await createHash(this.nft, this.buyer, this.idOther);
         expect(await this.nft.ownerOf(this.id)).to.equal(this.escrow.address);
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
 

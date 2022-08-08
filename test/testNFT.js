@@ -73,14 +73,16 @@ describe("RealEstateNFT", function () {
             this.owner.address,
             metadataURI,
             this.lien1.address,
-            "lease-hash"
+            "lease-hash",
+            "This user agrees to the conitions"
         );
 
         await this.nft.mint(
             this.owner.address,
             metadataURI,
             this.lien2.address,
-            "lease-hash"
+            "lease-hash",
+            "This user agrees to the conitions"
         );
 
         this.p1Conn = this.nft.connect(this.lien1P);
@@ -142,7 +144,8 @@ describe("RealEstateNFT", function () {
     });
 
     it("Disallows non escrow contracts to transfer", async function() {
-        await expect(this.nft.connect(this.owner).transferFrom(this.owner.address, this.ot.address, this.idOther)).to.be.revertedWith("Token must be passed through Sales Contract");
+        await expect(this.nft.connect(this.owner).transferFrom(this.owner.address, this.ot.address, this.idOther))
+                        .to.be.revertedWith("Token must be passed through Sales Contract");
     });
 
     it("Allow to transfer to escrow", async function() {
