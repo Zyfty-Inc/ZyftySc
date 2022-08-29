@@ -52,6 +52,8 @@ contract ZyftySalesContract is Ownable {
 
     //      listingID   Property
     mapping (uint256 => ListedProperty) propertyListing;
+    //      listingID   
+    mapping (uint256 => mapping(address => bool)) buyers;
     address private admin;
 
     constructor(address zyftyAdmin) {
@@ -98,7 +100,30 @@ contract ZyftySalesContract is Ownable {
         sellPropertyBuyer(nftContract, tokenId, price, time, address(0));
     }
 
-    // hash identifying_info_hash, nft_physical_contract_hash signature 
+    function addBuyer(uint256 id, address buyer) 
+        public 
+        inState(id, EscrowState.INITIALIZED)
+        withinWindow(id) {
+        
+        require(propertyListing[id].seller == msg.sender, "You are not the seller");
+        buyers[id][buyer] = true;
+    }
+
+    function removeBuyer(uint256 id, address buyer) 
+        public 
+        inState(id, EscrowState.INITIALIZED)
+        withinWindow(id) {
+        
+        require(propertyListing[id].seller == msg.sender, "You are not the seller");
+        buyers[id][buyer] = false;
+    }
+
+    /**
+     * Deposits the funds required for depositng the asset.
+     * The asset amount could be specified by the user as long
+     * as the seller agrees to receive funds in the payment method
+     * provided
+     */
     function buyProperty(uint256 id, bytes memory agreementSignature)
         public
         inState(id, EscrowState.INITIALIZED)
@@ -159,8 +184,10 @@ contract ZyftySalesContract is Ownable {
         IERC20 token = IERC20(propertyListing[id].asset);
 
         uint256 fees = propertyListing[id].price/200;
+        uint256 reserve = nft.getReserve(propertyListing[id].tokenID);
         ILien l = ILien(nft.lien(propertyListing[id].tokenID));
-        require(propertyListing[id].price - (l.balance() + fees) >= 0, "Not enough funds to fully payout liens");
+        require(propertyListing[id].price + reserve - (l.balance() + fees) >= 0, "Not enough funds to fully payout liens");
+        delete reserve;
         // Approve the transfer to increase the reserve account
         token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);
         nft.increaseReserve(propertyListing[id].tokenID, propertyListing[id].price - fees);
@@ -185,6 +212,7 @@ contract ZyftySalesContract is Ownable {
 
     function cleanup(uint256 id) internal {
         delete propertyListing[id];
+        // delete buyers[id];
     }
 
     modifier withinWindow(uint256 id) {
@@ -205,15 +233,5 @@ contract ZyftySalesContract is Ownable {
     function getProperty(uint256 id) public view returns(ListedProperty memory) {
         return propertyListing[id];
     }
-
-    // TODO: move this to NFT
-    // Functions to verify hash signature
-    function createAgreementHash(
-        string memory prepend,
-        string memory nftLeaseHash
-    ) public view returns (bytes32) {
-        return keccak256(abi.encode(prepend, msg.sender, nftLeaseHash));
-    }
-
 }
 

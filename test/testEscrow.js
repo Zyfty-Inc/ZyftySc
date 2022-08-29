@@ -89,9 +89,9 @@ describe("ZyftySalesContract", function () {
         );
         await r.wait()
 
-        // mint a second one for fake signing
+        // mint a second one for fake signing + secondary test
         r = await this.nft.connect(this.seller).mint(
-            this.zyftyAdmin.address,
+            this.seller.address,
             metadataURI,
             this.lien.address,
             leaseHash,
@@ -101,6 +101,7 @@ describe("ZyftySalesContract", function () {
 
         r = await this.nft.connect(this.seller).approve(this.escrow.address, this.id);
         await r.wait()
+
 
         this.buyerConn = this.escrow.connect(this.buyer);
         this.sellerConn = this.escrow.connect(this.seller);
@@ -142,7 +143,8 @@ describe("ZyftySalesContract", function () {
         expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee + this.tokenBalance);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
 
-        expect(await this.nft.balanceOf(this.seller.address)).to.equal(0);
+        // Should have only 1 nft now
+        expect(await this.nft.balanceOf(this.seller.address)).to.equal(1);
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(1);
     });
 
@@ -197,6 +199,37 @@ describe("ZyftySalesContract", function () {
         expect(p.state).to.equal(3); // 3 == CANCLED
 
         this.lienVal = 30; // For next test increase the lien value to a non zero number
+    });
+
+    it("Pays off primary lien account with funds already in the NFT", async function() {
+        const reserveAccount = this.lienVal*2;
+        // Add additional funds to cover lien payment
+        this.nft.connect(this.seller).increaseReserve(reserveAccount);
+
+        let r = await this.nft.connect(this.seller).approve(this.escrow.address, this.idOther);
+        await r.wait()
+
+        r = await this.sellerConn.sellProperty(
+            this.nft.address, 
+            this.idOther,  // tokenID
+            this.price,  // price
+            this.time, //time
+        );
+        await r.wait()
+        this.startTimeStamp = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
+
+        let hash = await createHash(this.nft, this.buyer, this.id)
+        r = await this.buyerConn.buyProperty(this.id, hash)
+        await r.wait()
+
+        r = await this.sellerConn.execute(this.id);
+        await r.wait()
+
+        const fee = this.price/200;
+        // Should have the funds left + the amount in reserve account
+        expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee - this.lienVal + this.tokenBalance);
+        expect( await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
+
     });
 
     it("Pays off primary lien account on Transfer", async function() {
