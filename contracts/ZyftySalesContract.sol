@@ -28,8 +28,8 @@ contract ZyftySalesContract is Ownable {
 
     enum EscrowState {
         NOT_CREATED, // Have initial state be not created for after clearing
-        INITIALIZED,
-        FUNDED,
+        INITIALIZED, // buyer should begin as address(0)
+        FUNDED, // buyer should be non 0
         CANCELED
     }
 
@@ -46,13 +46,14 @@ contract ZyftySalesContract is Ownable {
         uint256 price;
         uint256 created;
 
-        bool buyerPaid;
         EscrowState state;
     }
 
     //      listingID   Property
     mapping (uint256 => ListedProperty) propertyListing;
-    //      listingID   
+
+    // Whitelist structure for buyers
+    //     listingID           user       Able to buy
     mapping (uint256 => mapping(address => bool)) buyers;
     address private admin;
 
@@ -60,16 +61,15 @@ contract ZyftySalesContract is Ownable {
         admin = zyftyAdmin;
     }
 
-    function sellPropertyBuyer(
+    function sellProperty(
             address nftContract,
             uint256 tokenId,
             uint256 price,
-            uint256 time,
-            address buyer)
+            uint256 time)
         public
         returns(uint256)
         {
-        require(nftContract != address(0), "NFT Contract is zero address");
+        require(nftContract != address(0), "ZyftySalesContract: NFT Contract is zero address");
         ZyftyNFT nft = ZyftyNFT(nftContract);
         nft.transferFrom(msg.sender, address(this), tokenId);
         ILien l = ILien(nft.lien(tokenId));
@@ -82,30 +82,20 @@ contract ZyftySalesContract is Ownable {
                                               time: time,
                                               asset: nft.asset(tokenId),
                                               price: price,
-                                              buyer: buyer,
+                                              buyer: address(0),
                                               seller: msg.sender,
-                                              buyerPaid: false,
                                               created: block.timestamp,
                                               state: EscrowState.INITIALIZED});
         emit E_PropertyListed(id);
         return id;
     }
 
-    function sellProperty(
-            address nftContract,
-            uint256 tokenId,
-            uint256 price,
-            uint256 time)
-            public {
-        sellPropertyBuyer(nftContract, tokenId, price, time, address(0));
-    }
-
     function addBuyer(uint256 id, address buyer) 
         public 
-        inState(id, EscrowState.INITIALIZED)
+        inState(id, EscrowState.INITIALIZED) // Can't add buyer in a non funded state
         withinWindow(id) {
         
-        require(propertyListing[id].seller == msg.sender, "You are not the seller");
+        require(propertyListing[id].seller == msg.sender, "ZyftySalesContract: You are not the seller");
         buyers[id][buyer] = true;
     }
 
@@ -114,7 +104,7 @@ contract ZyftySalesContract is Ownable {
         inState(id, EscrowState.INITIALIZED)
         withinWindow(id) {
         
-        require(propertyListing[id].seller == msg.sender, "You are not the seller");
+        require(propertyListing[id].seller == msg.sender, "ZyftySalesContract: You are not the seller");
         buyers[id][buyer] = false;
     }
 
@@ -128,19 +118,18 @@ contract ZyftySalesContract is Ownable {
         public
         inState(id, EscrowState.INITIALIZED)
         withinWindow(id)
+        canBuy(id)
         {
         ZyftyNFT nft = ZyftyNFT(propertyListing[id].nftContract);
         address signedAddress = nft.createAgreementHash(propertyListing[id].tokenID, msg.sender)
                                     .toEthSignedMessageHash()
                                     .recover(agreementSignature);
 
-        require(signedAddress == msg.sender, "Incorrect Signature");
-        require(propertyListing[id].buyer == address(0) || msg.sender == propertyListing[id].buyer, "You are not authorized to buy this");
+        require(signedAddress == msg.sender, "ZyftySalesContract: Incorrect Agreement Signature");
         IERC20 token = IERC20(propertyListing[id].asset);
 
         token.transferFrom(msg.sender, address(this), propertyListing[id].price);
         propertyListing[id].state = EscrowState.FUNDED;
-        propertyListing[id].buyerPaid = true;
         propertyListing[id].buyer = msg.sender;
     }
 
@@ -149,11 +138,12 @@ contract ZyftySalesContract is Ownable {
         public
         afterWindow(id)
         {
-        require(msg.sender == propertyListing[id].seller, "You must be the seller");
+        require(msg.sender == propertyListing[id].seller, "ZyftySalesContract: You must be the seller");
         IERC721 nft = IERC721(propertyListing[id].nftContract);
         nft.transferFrom(address(this), msg.sender, id);
         propertyListing[id].state = EscrowState.CANCELED;
-        if (propertyListing[id].buyerPaid == false) {
+        // If no buyer exists, then there is no refund owed to the buyer
+        if (propertyListing[id].buyer == address(0)) {
             cleanup(id);
         }
     }
@@ -162,15 +152,17 @@ contract ZyftySalesContract is Ownable {
         public
         afterWindow(id)
         {
-        require(propertyListing[id].buyerPaid == true, "Buyer never paid");
-        require(msg.sender == propertyListing[id].buyer, "You must be the buyer");
+        address buyer = propertyListing[id].buyer;
+        require(buyer != address(0), "ZyftySalesContract: Buyer does not exist");
+        require(msg.sender == buyer, "ZyftySalesContract: You must be the buyer");
         IERC20 token = IERC20(propertyListing[id].asset);
         token.transfer(propertyListing[id].buyer, propertyListing[id].price);
         if (propertyListing[id].state == EscrowState.CANCELED) {
             cleanup(id);
         } else {
             propertyListing[id].state = EscrowState.CANCELED;
-            propertyListing[id].buyerPaid = false;
+            // Set buyer to 0 address to prevent double revert
+            propertyListing[id].buyer = address(0);
         }
     }
 
@@ -186,7 +178,7 @@ contract ZyftySalesContract is Ownable {
         uint256 fees = propertyListing[id].price/200;
         uint256 reserve = nft.getReserve(propertyListing[id].tokenID);
         ILien l = ILien(nft.lien(propertyListing[id].tokenID));
-        require(propertyListing[id].price + reserve - (l.balance() + fees) >= 0, "Not enough funds to fully payout liens");
+        require(propertyListing[id].price + reserve - (l.balance() + fees) >= 0, "ZyftySalesContract: Not enough funds to fully payout liens");
         delete reserve;
         // Approve the transfer to increase the reserve account
         token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);
@@ -216,17 +208,22 @@ contract ZyftySalesContract is Ownable {
     }
 
     modifier withinWindow(uint256 id) {
-        require(propertyListing[id].created + propertyListing[id].time >= block.timestamp, "Window is closed");
+        require(propertyListing[id].created + propertyListing[id].time >= block.timestamp, "ZyftySalesContract: Window is closed");
         _;
     }
 
     modifier afterWindow(uint256 id) {
-        require(block.timestamp >= propertyListing[id].created + propertyListing[id].time, "Window is still open");
+        require(block.timestamp >= propertyListing[id].created + propertyListing[id].time, "ZyftySalesContract: Window is still open");
         _;
     }
 
     modifier inState(uint256 id, EscrowState state) {
-        require(propertyListing[id].state == state, "Not in the correct state");
+        require(propertyListing[id].state == state, "ZyftySalesContract: Not in the correct state");
+        _;
+    }
+
+    modifier canBuy(uint256 id) {
+        require(buyers[id][msg.sender] == true, "ZyftySalesContract: Not an approved buyer");
         _;
     }
 

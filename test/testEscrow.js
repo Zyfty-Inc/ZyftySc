@@ -116,6 +116,10 @@ describe("ZyftySalesContract", function () {
             this.time, //time
         );
         await r.wait()
+        await this.sellerConn.addBuyer(
+            this.id, // Property ID
+            this.buyer.address
+        )
         this.startTimeStamp = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
     });
 
@@ -261,7 +265,7 @@ describe("ZyftySalesContract", function () {
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
 
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance);
-        await expect(this.buyerConn.buyProperty(this.id, hash)).to.be.revertedWith("Incorrect Signature");
+        await expect(this.buyerConn.buyProperty(this.id, hash)).to.be.revertedWith("ZyftySalesContract: Incorrect Agreement Signature");
     });
 
     it("Fails buy when incorrect hash", async function() {
@@ -271,7 +275,10 @@ describe("ZyftySalesContract", function () {
         expect(await this.nft.balanceOf(this.buyer.address)).to.equal(0);
 
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance);
-        await expect(this.buyerConn.buyProperty(this.id, hash)).to.be.revertedWith("Incorrect Signature");
+        await expect(this.buyerConn.buyProperty(this.id, hash)).to.be.revertedWith("ZyftySalesContract: Incorrect Agreement Signature");
+    });
+
+    it("Disallows non buyers to purchase", async function () {
     });
 
 });
