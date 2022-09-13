@@ -10,10 +10,6 @@ function sleep(ms) {
 }
 
 
-
-const txFeePerGas = '199999946752';
-const storageByteDeposit = '100000000000000';
-
 // Tests should be ran on localhost test network
 // Run command `npx hardhat test --network localhost` to test this code
 describe("ZyftySalesContract", function () {
@@ -21,10 +17,7 @@ describe("ZyftySalesContract", function () {
     // Define constants, that could be redefined in other tests
     before(async function() {
         this.tokenBalance = 300;
-        this.time = 5;
-        if (hre.network.name == "mandalaNet" || hre.network.name == "mandala" || hre.network.name == "matic") {
-            this.time = 20;
-        }
+        this.time = 8;
         this.price = 200;
         this.id = 1;
         this.idOther = 2;
@@ -43,39 +36,15 @@ describe("ZyftySalesContract", function () {
 
         let leaseHash = "lease-hash"
 
-        const blockNumber = await ethers.provider.getBlockNumber();
-        const ethParams = calcEthereumTransactionParams({
-            gasLimit: '21000010',
-            validUntil: (blockNumber + 100000).toString(),
-            storageLimit: '640010',
-            txFeePerGas,
-            storageByteDeposit
-        });
+        this.escrow = await ESCROW_FACTORY.deploy(this.zyftyAdmin.address);
+        this.nft = await NFT_FACTORY.deploy(this.escrow.address);
+        
+        // Create two assets, one for selling one for liens
+        this.token = await TOKEN_FACTORY.deploy(this.seller.address, this.buyer.address, this.lien1P.address, this.tokenBalance);
 
-        if (hre.network.name == "mandalaNet" || hre.network.name == "mandala") {
-            this.escrow = await ESCROW_FACTORY.deploy(this.zyftyAdmin.address, {
-                    gasPrice: ethParams.txGasPrice,
-                    gasLimit: ethParams.txGasLimit,
-                    });
-            this.nft = await NFT_FACTORY.deploy(this.escrow.address, {
-                    gasPrice: ethParams.txGasPrice,
-                    gasLimit: ethParams.txGasLimit,
-                    });
-            this.token = await TOKEN_FACTORY.deploy(this.seller.address, this.buyer.address, this.lien1P.address, this.tokenBalance, {
-                    gasPrice: ethParams.txGasPrice,
-                    gasLimit: ethParams.txGasLimit,
-                    });
+        this.lienToken = await TOKEN_FACTORY.deploy(this.seller.address, this.buyer.address, this.lien1P.address, this.tokenBalance)
 
-            this.lien = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lienVal, this.token.address, {
-                    gasPrice: ethParams.txGasPrice,
-                    gasLimit: ethParams.txGasLimit,
-                    })
-        } else {
-            this.escrow = await ESCROW_FACTORY.deploy(this.zyftyAdmin.address);
-            this.nft = await NFT_FACTORY.deploy(this.escrow.address);
-            this.token = await TOKEN_FACTORY.deploy(this.seller.address, this.buyer.address, this.lien1P.address, this.tokenBalance);
-            this.lien = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lienVal, this.token.address);
-        }
+        this.lien = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lienVal, this.lienToken.address);
 
         metadataURI = "cid/test.json";
         let sigMessage = "The following address agrees to the lease"
@@ -112,6 +81,7 @@ describe("ZyftySalesContract", function () {
         r = await this.sellerConn.sellProperty(
             this.nft.address, 
             this.id,  // tokenID
+            this.token.address,
             this.price,  // price
             this.time, //time
         );
@@ -207,55 +177,33 @@ describe("ZyftySalesContract", function () {
 
     it("Pays off primary lien account with funds already in the NFT", async function() {
         const reserveAccount = this.lienVal*2;
+        this.lienToken.connect(this.seller).approve(this.nft.address, reserveAccount)
         // Add additional funds to cover lien payment
-        this.nft.connect(this.seller).increaseReserve(reserveAccount);
+        await this.nft.connect(this.seller).increaseReserve(this.id, reserveAccount);
 
-        let r = await this.nft.connect(this.seller).approve(this.escrow.address, this.idOther);
-        await r.wait()
-
-        r = await this.sellerConn.sellProperty(
-            this.nft.address, 
-            this.idOther,  // tokenID
-            this.price,  // price
-            this.time, //time
-        );
-        await r.wait()
-        this.startTimeStamp = (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp;
+        await this.nft.connect(this.seller).approve(this.escrow.address, this.idOther);
 
         let hash = await createHash(this.nft, this.buyer, this.id)
-        r = await this.buyerConn.buyProperty(this.id, hash)
-        await r.wait()
+        await this.buyerConn.buyProperty(this.id, hash)
 
-        r = await this.sellerConn.execute(this.id);
-        await r.wait()
+        await this.sellerConn.execute(this.id);
 
         const fee = this.price/200;
         // Should have the funds left + the amount in reserve account
-        expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee - this.lienVal + this.tokenBalance);
-        expect( await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
-
-    });
-
-    it("Pays off primary lien account on Transfer", async function() {
-        let hash = await createHash(this.nft, this.buyer, this.id)
-        let r = await this.buyerConn.buyProperty(this.id, hash)
-        await r.wait()
-
-        r = await this.sellerConn.execute(this.id);
-        await r.wait()
-
-        const fee = this.price/200;
-        expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee - this.lienVal + this.tokenBalance);
+        expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee + this.tokenBalance);
+        expect(await this.lienToken.balanceOf(this.seller.address)).to.equal(this.tokenBalance - this.lienVal);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
 
-        this.lienVal = this.price; // For the next testcase
     });
 
-    it("Reverts execute when proceeds don't cover lien payments", async function() {
+    it("Reverts execute when there are no funds in the lien account", async function() {
         let hash = await createHash(this.nft, this.buyer, this.id)
         let r = await this.buyerConn.buyProperty(this.id, hash)
-        await r.wait();
-        await expect(this.sellerConn.execute(this.id)).to.be.reverted;
+        await r.wait()
+
+        await expect(this.sellerConn.execute(this.id)).to.be.revertedWith('ZyftySalesContract: Not enough funds to fully payout liens');
+
+        this.lienVal = this.price; // For the next testcase
     });
 
     it("Fails buy when signed by the wrong person", async function() {

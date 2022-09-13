@@ -64,6 +64,7 @@ contract ZyftySalesContract is Ownable {
     function sellProperty(
             address nftContract,
             uint256 tokenId,
+            address asset,
             uint256 price,
             uint256 time)
         public
@@ -80,7 +81,7 @@ contract ZyftySalesContract is Ownable {
         propertyListing[id] = ListedProperty({nftContract: nftContract,
                                               tokenID: tokenId,
                                               time: time,
-                                              asset: nft.asset(tokenId),
+                                              asset: asset,
                                               price: price,
                                               buyer: address(0),
                                               seller: msg.sender,
@@ -176,24 +177,24 @@ contract ZyftySalesContract is Ownable {
         IERC20 token = IERC20(propertyListing[id].asset);
 
         uint256 fees = propertyListing[id].price/200;
-        uint256 reserve = nft.getReserve(propertyListing[id].tokenID);
-        ILien l = ILien(nft.lien(propertyListing[id].tokenID));
-        require(propertyListing[id].price + reserve - (l.balance() + fees) >= 0, "ZyftySalesContract: Not enough funds to fully payout liens");
-        delete reserve;
-        // Approve the transfer to increase the reserve account
-        token.approve(propertyListing[id].nftContract, propertyListing[id].price - fees);
-        nft.increaseReserve(propertyListing[id].tokenID, propertyListing[id].price - fees);
+        uint256 lienBalance = ILien(nft.lien(propertyListing[id].tokenID)).balance();
 
-        nft.payLien(propertyListing[id].tokenID, l.balance());
-        delete l;
+        require(nft.getReserve(propertyListing[id].tokenID) >= lienBalance, "ZyftySalesContract: Not enough funds to fully payout liens");
+
+        nft.payLien(propertyListing[id].tokenID, lienBalance);
 
         uint256 remainingFunds = nft.getReserve(propertyListing[id].tokenID);
+        IERC20 lienToken = IERC20(nft.asset(propertyListing[id].tokenID));
+        // Get the lien token's value
         nft.redeemReserve(propertyListing[id].tokenID, remainingFunds);
 
-        // Should already hold these fees
+        // Transfer fees to the admin
         token.transfer(admin, fees);
-        // Proceeds after liens paid go here
-        token.transfer(propertyListing[id].seller, remainingFunds);
+
+        // Sends price - fees in settlement asset
+        token.transfer(propertyListing[id].seller, propertyListing[id].price - fees);
+        // Sends left over lien assets to the seller.
+        lienToken.transfer(propertyListing[id].seller, remainingFunds);
 
         // Finally transfer the NFT to the buyer
         nft.transferFrom(address(this), propertyListing[id].buyer, propertyListing[id].tokenID);
