@@ -115,6 +115,7 @@ describe("ZyftySalesContract", function () {
 
         const fee = this.price/200;
         expect(await this.token.balanceOf(this.seller.address)).to.equal(this.price - fee + this.tokenBalance);
+        expect(await this.token.balanceOf(this.zyftyAdmin.address)).to.equal(fee);
         expect(await this.token.balanceOf(this.buyer.address)).to.equal(this.tokenBalance - this.price);
 
         // Should have only 1 nft now
@@ -227,6 +228,18 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Disallows non buyers to purchase", async function () {
+        expect(false).to.equal(true);
+    });
+
+    it("Allows buyer to propose lower price", async () => {
+        expect(false).to.equal(true);
+    });
+
+    it("Allows seller to deny lower price", async () => {
+        expect(false).to.equal(true);
+    });
+
+    it("Cleans proposed prices on sell", async () => {
     });
 
 });
