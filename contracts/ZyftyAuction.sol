@@ -1,9 +1,10 @@
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "contracts/ZyftyNFT.sol";
 
-contract AuctionGenerator {
+contract ZyftyAuction is Ownable {
     
     using Counters for Counters.Counter;
     using ECDSA for bytes32;
@@ -92,7 +93,13 @@ contract AuctionGenerator {
 
     // Closes the auction, the auction can close prematurely at the owners discretion
     function close() public {
-        
+        // Handle no buyers
+
+        uint256 closedPrice;
+        uint256 fees = closedPrice / 200;
+
+        token.transfer(fees, zyftyAdmin);
+
     }
 
 }

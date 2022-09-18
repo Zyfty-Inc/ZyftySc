@@ -55,11 +55,6 @@ contract ZyftySalesContract is Ownable {
     // Whitelist structure for buyers
     //     listingID           user       Able to buy
     mapping (uint256 => mapping(address => bool)) buyers;
-    address private admin;
-
-    constructor(address zyftyAdmin) {
-        admin = zyftyAdmin;
-    }
 
     function sellProperty(
             address nftContract,
@@ -189,7 +184,7 @@ contract ZyftySalesContract is Ownable {
         nft.redeemReserve(propertyListing[id].tokenID, remainingFunds);
 
         // Transfer fees to the admin
-        token.transfer(admin, fees);
+        token.transfer(owner(), fees);
 
         // Sends price - fees in settlement asset
         token.transfer(propertyListing[id].seller, propertyListing[id].price - fees);

@@ -30,13 +30,15 @@ describe("ZyftySalesContract", function () {
 
     beforeEach(async function() { 
         // for logging
-        const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract");
+        const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract"{
+            signer: this.zyftyAdmin, // set the zyftyAdmin as the owner on deploy
+        });
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
         const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT");
 
         let leaseHash = "lease-hash"
 
-        this.escrow = await ESCROW_FACTORY.deploy(this.zyftyAdmin.address);
+        this.escrow = await ESCROW_FACTORY.deploy();
         this.nft = await NFT_FACTORY.deploy(this.escrow.address);
         
         // Create two assets, one for selling one for liens
@@ -240,6 +242,7 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Cleans proposed prices on sell", async () => {
+        expect(false).to.equal(true);
     });
 
 });
