@@ -85,8 +85,10 @@ describe("ZyftyAuction", function () {
 
         let hash = createHash(this.nft, this.bidder1, this.id);
         await this.b1Conn.bid(this.id, this.startPrice, hash);
-        console.log("hi");
-        await sleep(this.time);
+
+        await sleep(this.time*1000);
+        await this.token.connect(this.bidder1).approve(this.auction.address, this.startPrice);
+
         await this.sellConn.close(this.id);
 
         const fee = this.startPrice / 200;
@@ -104,7 +106,9 @@ describe("ZyftyAuction", function () {
         expect(await this.auction.getDeposit(this.id, this.bidder1.address)).to.equal(this.startPrice);
         await expect(this.b2Conn.bid(this.id, this.startPrice, hash2)).to.be.reverted;
         await this.b2Conn.bid(this.id, this.startPrice + 1, hash2);
-        await sleep(this.time);
+
+        await sleep(this.time*1000);
+        await this.token.connect(this.bidder1).approve(this.auction.address, this.startPrice);
 
         await this.sellConn.close(this.id);
         // Owner should now be bidder 2

@@ -16,9 +16,8 @@ contract ZyftyAuction is Ownable {
         uint256 startingPrice; // The starting price for all bids
         uint256 maxPrice; // If non zero, this is the buy it now price, will auto close the auction???
         address asset; // The asset to purchase in
-        uint256 auctionEnd; // The time at which all bids will stop
-
-        bool closed;
+        uint256 created; // The time at which the auction was made
+        uint256 duration; // The length of the auction
 
         uint256 highestBid; // The current best bid
         address highestBidder; // The address of the highest bidder
@@ -50,8 +49,8 @@ contract ZyftyAuction is Ownable {
                                  startingPrice: startingPrice,
                                  maxPrice: maxPrice,
                                  asset: asset,
-                                 auctionEnd: block.timestamp + duration,
-                                 closed: false,
+                                 created: block.timestamp,
+                                 duration: duration,
                                  bidders: 0,
                                  highestBid: 0,
                                  highestBidder: address(0)
@@ -60,7 +59,7 @@ contract ZyftyAuction is Ownable {
     }
 
     // Amount is amount to add to the auction
-    function bid(uint256 id, uint256 amount, bytes memory agreementSignature) public {
+    function bid(uint256 id, uint256 amount, bytes memory agreementSignature) public onlyOpened(id) {
         Auction storage auction = auctions[id];
         ZyftyNFT nft = ZyftyNFT(auction.zyftyContract);
         address signedAddress = nft.createAgreementHash(auction.tokenId, msg.sender)
@@ -89,8 +88,8 @@ contract ZyftyAuction is Ownable {
     function withdrawFromAuction(uint256 id) public {
         uint256 refund = deposits[id][msg.sender];
         require(refund > 0, "ZyftyAuction: No funds deposited");
-        // TODO test
         require(auctions[id].highestBidder != msg.sender || auctionClosed(id), "ZyftyAuction: Highest bidder can't withdraw until auction is closed");
+        // TODO test
         IERC20 token = IERC20(auctions[id].asset);
         token.transfer(msg.sender, refund);
         deposits[id][msg.sender] = 0;
@@ -106,14 +105,13 @@ contract ZyftyAuction is Ownable {
     }
 
     function auctionClosed(uint256 auctionId) public view returns(bool) {
-        return auctions[auctionId].closed || block.timestamp >= auctions[auctionId].auctionEnd;
+        return block.timestamp >= auctions[auctionId].created + auctions[auctionId].duration;
     }
 
     // Closes the auction, the auction can close prematurely at the owners discretion
-    function close(uint256 id) public {
+    function close(uint256 id) public onlyClosed(id) {
         // Special case, no buyer
         Auction storage auction = auctions[id];
-        require(auctionClosed(id) || msg.sender == auction.seller, "The auction must be closed");
         if (auction.highestBidder == address(0)) {
 
             ZyftyNFT nft = ZyftyNFT(auction.zyftyContract);
@@ -128,6 +126,16 @@ contract ZyftyAuction is Ownable {
         token.transfer(owner(), fees);
         token.transfer(auction.seller, closedPrice - fees);
         nft.transferFrom(address(this), auction.highestBidder, auction.tokenId);
+    }
+
+    modifier onlyClosed(uint256 id) {
+        require(auctionClosed(id), "The auction must be closed");
+        _;
+    }
+
+    modifier onlyOpened(uint256 id) {
+        require(!auctionClosed(id), "The auction must be opened");
+        _;
     }
 
 }
