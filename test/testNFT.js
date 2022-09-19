@@ -18,20 +18,13 @@ describe("RealEstateNFT", function () {
 
     before(async function() { 
 
+        [this.owner, this.lien1P, this.ot, this.escrow, this.zyftyAdmin] = await ethers.getSigners();
+
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
-        const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT");
-        this.LIEN_FACTORY = await hre.ethers.getContractFactory("Lien");
-
-        const blockNumber = await ethers.provider.getBlockNumber();
-        const ethParams = calcEthereumTransactionParams({
-            gasLimit: '21000010',
-            validUntil: (blockNumber + 100).toString(),
-            storageLimit: '640010',
-            txFeePerGas,
-            storageByteDeposit
+        const NFT_FACTORY = await hre.ethers.getContractFactory("ZyftyNFT", {
+            signer: this.zyftyAdmin
         });
-
-        [this.owner, this.lien1P, this.ot, this.escrow] = await ethers.getSigners();
+        this.LIEN_FACTORY = await hre.ethers.getContractFactory("Lien");
 
         this.tokenBalance = 50;
         this.id = 1;
@@ -39,33 +32,12 @@ describe("RealEstateNFT", function () {
         this.lien1Val = 10;
         this.otherLienValue = 5;
 
-        if (hre.network.name == "mandala" || hre.network.name == "mandalaNet") {
-            this.nft = await NFT_FACTORY.deploy(this.escrow.address, {
-                gasPrice: ethParams.txGasPrice,
-                gasLimit: ethParams.txGasLimit,
-                });
+        this.nft = await NFT_FACTORY.deploy(this.escrow.address);
 
-            this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.ot.address, this.tokenBalance, {
-                gasPrice: ethParams.txGasPrice,
-                gasLimit: ethParams.txGasLimit,
-                });
+        this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.ot.address, this.tokenBalance);
 
-            this.lien1 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
-                gasPrice: ethParams.txGasPrice,
-                gasLimit: ethParams.txGasLimit,
-                })
-            this.lien2 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address, {
-                gasPrice: ethParams.txGasPrice,
-                gasLimit: ethParams.txGasLimit,
-                })
-        } else {
-            this.nft = await NFT_FACTORY.deploy(this.escrow.address);
-
-            this.token = await TOKEN_FACTORY.deploy(this.owner.address, this.lien1P.address, this.ot.address, this.tokenBalance);
-
-            this.lien1 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address)
-            this.lien2 = await this.LIEN_FACTORY.deploy(this.owner.address, this.lien1Val, this.token.address)
-        }
+        this.lien1 = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lien1Val, this.token.address)
+        this.lien2 = await this.LIEN_FACTORY.deploy(this.lien1P.address, this.lien1Val, this.token.address)
 
         let metadataURI = "cid/test.json";
 
@@ -94,6 +66,24 @@ describe("RealEstateNFT", function () {
 
     it("Expects primary lien to exist", async function() {
         expect(await this.ownerConn.lien(this.id)).to.equal(this.lien1.address);
+    });
+
+    it("Tests changing primary liens", async function() {
+        expect(await this.ownerConn.lien(this.id)).to.equal(this.lien1.address);
+
+        let lien3 = await this.LIEN_FACTORY.deploy(this.lien1P.address, 30, this.token.address)
+        await this.p1Conn.proposeLienUpdate(this.id, lien3.address);
+        await expect(this.ownerConn.acceptLienUpdate(this.id, this.lien1.address)).to.be.revertedWith("Lien address accepted is not the one proposed");
+        await this.ownerConn.acceptLienUpdate(this.id, lien3.address);
+
+        expect(await this.nft.lien(this.id)).to.equal(lien3.address);
+
+        await expect(this.ownerConn.acceptLienUpdate(this.id, lien3.address)).to.be.revertedWith("No lien proposed");
+
+        // Change back over
+        await this.p1Conn.proposeLienUpdate(this.id, this.lien1.address);
+        this.ownerConn.acceptLienUpdate(this.id, this.lien1.address)
+
     });
 
     it("Increases the reseves", async function() {
@@ -130,6 +120,7 @@ describe("RealEstateNFT", function () {
         expect(await this.token.balanceOf(this.owner.address)).to.equal(this.tokenBalance);
     });
 
+
     it("Pays assets off with reserves", async function() {
         // Have 1 lien to pay with value 10
         const amountToPay = 10;
@@ -160,7 +151,7 @@ describe("RealEstateNFT", function () {
     })
 
     it("Destroys NFTs", async function() {
-        await this.ownerConn.destroyNFT(this.id);
+        await this.nft.connect(this.zyftyAdmin).destroyNFT(this.id);
         await expect(this.ownerConn.lien(this.id)).to.be.reverted;
     });
 });

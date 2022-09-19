@@ -108,10 +108,10 @@ contract ZyftyNFT is ERC721, Ownable {
      */
     function acceptLienUpdate(uint256 id, address confirmLienAddress) public {
         Account storage acc = accounts[id];
-        require(acc.proposedLien != address(0), "No valid lien proposed");
+        require(acc.proposedLien != address(0), "No lien proposed");
         require(acc.proposedLien == confirmLienAddress, "Lien address accepted is not the one proposed");
         ILien lien = ILien(confirmLienAddress);
-        require(msg.sender == lien.lienProvider(), "Only the lien provider can accept this lien");
+        require(msg.sender == ownerOf(id), "Only the owner can accept this lien");
         address oldLien = acc.primaryLien;
         acc.primaryLien = confirmLienAddress;
         acc.proposedLien = address(0);
