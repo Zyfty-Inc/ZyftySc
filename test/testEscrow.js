@@ -30,7 +30,7 @@ describe("ZyftySalesContract", function () {
 
     beforeEach(async function() { 
         // for logging
-        const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract"{
+        const ESCROW_FACTORY = await ethers.getContractFactory("ZyftySalesContract",{
             signer: this.zyftyAdmin, // set the zyftyAdmin as the owner on deploy
         });
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
