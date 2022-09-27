@@ -150,6 +150,19 @@ describe("RealEstateNFT", function () {
         expect(await this.nft.ownerOf(this.id)).to.equal(this.ot.address);
     })
 
+    it("Allows admin to lock nft", async function() {
+        await this.nft.updateEscrow(this.owner.address);
+        await this.nft.connect(this.zyftyAdmin).lockNFT(this.id);
+        await expect(this.nft.connect(this.ot)
+            .transferFrom(this.ot.address, this.owner.address, this.id)).to.be.revertedWith("NFT is locked");
+        await this.nft.connect(this.zyftyAdmin).unlockNFT(this.id);
+        await this.nft.connect(this.ot)
+                .transferFrom(this.ot.address, this.owner.address, this.id)
+
+        expect(await this.nft.ownerOf(this.id)).to.equal(this.owner.address);
+
+    })
+
     it("Destroys NFTs", async function() {
         await this.nft.connect(this.zyftyAdmin).destroyNFT(this.id);
         await expect(this.ownerConn.lien(this.id)).to.be.reverted;

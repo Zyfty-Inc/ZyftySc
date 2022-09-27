@@ -23,6 +23,7 @@ contract ZyftyNFT is ERC721, Ownable {
         uint256 reserve;
         address primaryLien; // id 0
         address proposedLien;
+        bool locked;
         string tokenURI;
         string _leaseHash;
         string _sigMessage;
@@ -60,6 +61,7 @@ contract ZyftyNFT is ERC721, Ownable {
             reserve : 0,
             primaryLien: _primaryLien,
             proposedLien: address(0),
+            locked: false,
             tokenURI: meta_data_uri,
             _leaseHash: lease_hash,
             _sigMessage: signMessage
@@ -185,6 +187,16 @@ contract ZyftyNFT is ERC721, Ownable {
         acc.reserve -= (amount - remainder);
         return amount - remainder;
     }
+
+    function lockNFT(uint256 id) public onlyOwner {
+        // Prevents NFT from being transfered
+        accounts[id].locked = true;
+    }
+
+    function unlockNFT(uint256 id) public onlyOwner {
+        // Unlcoks transfering
+        accounts[id].locked = false;
+    }
     
     /**
      * @dev Destroyes the NFT specified by id
@@ -260,10 +272,12 @@ contract ZyftyNFT is ERC721, Ownable {
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 tokenID
+        uint256 id
     ) internal override {
         // Require that this can only be transfered via the escrow contract
         require(from == address(0) || to == address(0) || from == escrow || to == escrow, "Token must be passed through Sales Contract");
+        // Check if locked, exception is if to is address(0) for burns
+        require(!accounts[id].locked, "NFT is locked");
     }
 
 }

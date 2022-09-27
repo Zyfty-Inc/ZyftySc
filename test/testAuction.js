@@ -129,5 +129,11 @@ describe("ZyftyAuction", function () {
         expect(await this.auction.getDeposit(this.id, this.bidder1.address)).to.equal(0);
     })
 
+    it("Lets owner withdraw if it has no bids", async function() {
+        await sleep(this.time*1000);
+        await this.sellConn.close(this.id);
+        expect(await this.nft.ownerOf(this.id)).to.equal(this.seller.address);
+    })
+
 });
 
