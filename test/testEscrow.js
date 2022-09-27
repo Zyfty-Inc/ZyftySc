@@ -230,19 +230,26 @@ describe("ZyftySalesContract", function () {
     });
 
     it("Disallows non buyers to purchase", async function () {
-        expect(false).to.equal(true);
-    });
+        let otherConn = this.escrow.connect(this.lien1P);
+        let hash = await createHash(this.nft, this.lien1P, this.id);
 
-    it("Allows buyer to propose lower price", async () => {
-        expect(false).to.equal(true);
-    });
+        await this.token.connect(this.lien1P).approve(this.escrow.address, this.price);
 
-    it("Allows seller to deny lower price", async () => {
-        expect(false).to.equal(true);
-    });
+        await expect(otherConn.buyProperty(this.id, hash)).to.be.revertedWith("ZyftySalesContract: Not an approved buyer");
+        // Now allow this to be purchased
+        await this.sellerConn.addBuyer(
+            this.id,
+            this.lien1P.address
+        );
+        // Remove previously working buyer
+        await this.sellerConn.removeBuyer(
+            this.id,
+            this.buyer.address
+        );
+        await expect(this.buyerConn.buyProperty(this.id, hash)).to.be.revertedWith("ZyftySalesContract: Not an approved buyer");
 
-    it("Cleans proposed prices on sell", async () => {
-        expect(false).to.equal(true);
+        // Expect this to work
+        await otherConn.buyProperty(this.id, hash);
     });
 
 });
