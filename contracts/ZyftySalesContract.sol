@@ -200,7 +200,6 @@ contract ZyftySalesContract is Ownable {
 
     function cleanup(uint256 id) internal {
         delete propertyListing[id];
-        // delete buyers[id];
     }
 
     modifier withinWindow(uint256 id) {

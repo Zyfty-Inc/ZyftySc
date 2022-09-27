@@ -1,3 +1,5 @@
+pragma solidity ^0.8.1;
+// SPDX-License-Identifier: MIT
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -112,9 +114,9 @@ contract ZyftyAuction is Ownable {
     function close(uint256 id) public onlyClosed(id) {
         // Special case, no buyer
         Auction storage auction = auctions[id];
+        ZyftyNFT nft = ZyftyNFT(auction.zyftyContract);
         if (auction.highestBidder == address(0)) {
 
-            ZyftyNFT nft = ZyftyNFT(auction.zyftyContract);
             nft.transferFrom(address(this), auction.seller, auction.tokenId);
             return;
         }
@@ -122,7 +124,6 @@ contract ZyftyAuction is Ownable {
         uint256 closedPrice = auction.highestBid;
         uint256 fees = closedPrice / 200;
         IERC20 token = IERC20(auction.asset);
-        ZyftyNFT nft = ZyftyNFT(auction.zyftyContract);
         token.transfer(owner(), fees);
         token.transfer(auction.seller, closedPrice - fees);
         nft.transferFrom(address(this), auction.highestBidder, auction.tokenId);
