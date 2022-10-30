@@ -105,20 +105,14 @@ created.  If the NFT Owner does not make timely fee payments per the terms of
 the Lease Agreement the Primary Lien is increased by Zyfty to equal the value
 of the overdue fee payments plus accrued interest as defined in the Lease
 Agreement.  These increases occur at Zyfty’s discretion or upon interaction
-with a Sales Contract.  Secondary Liens are created by a third party that the
-NFT Owner is entering into an agreement with (like a lender providing a loan
-against an owners NFT). The NFT Owner must allow a Secondary Lien to be
-placed.
+with a Sales Contract.
 
 ##### Paying Liens
 
 The NFT Owner can pay off the Primary Lien by placing the full amount of the
 Primary Lien in the Reimbursement Account.  After Zyfty draws down the value of
 any payments made on the NFT Owner’s behalf plus any accrued interest, it will
-set the lien value to zero.  The NFT Owner can pay off Secondary Liens by
-sending the lien value directly to the lien contract, after which the lien holder will
-remove the lien, or by paying the lien value to the NFT, which will send the
-funds to the lien contract and remove the lien when the balance is zeroed out.
+set the lien value to zero.
 
 ##### Destroying an NFT
 
@@ -132,13 +126,38 @@ and destroy the NFT.
 ### NFT functions
 
 ```
-mint(address recipient, string memory meta_data_uri, address lienProvider, address lienAssetType) returns(uint256)
-increaseReserve(uint256 tokenID)
-redeemReserve(uint256 tokenID, uint256 value) 
-getLien(uint256 tokenID, uint8 lienID)
-addLien(uint256 tokenID, uint256 value, address lienProvider, bool dynamicCost, address assetType) returns(uint8)
-payLien(uint256 tokenID, uint8 lienID, address assetType, uint256 amount) returns(uint256)
-increaseLien(uint256 tokenID, uint8 lienID, uint256 amount) 
+    /**
+     *
+     */
+    increaseReserve(uint256 tokenID)
+    
+    /**
+     * @dev Fetches the current number of ERC20 tokens in i
+     *      the reserve account in `asset()`
+     */
+    getReserve(uint256 tokenID, uint256 value) 
+    
+    /**
+     * Adds `value` funds to the reserve account 
+     */
+    redeemReserve(uint256 tokenID, uint256 value) 
+
+    /**
+     *
+     */
+    getLien(uint256 tokenID)
+
+    /**
+     * @dev Pays the `amount` funds in ERC20 token `asset()` from 
+     *      from the current funds in the reserve account.
+     */
+    payLien(uint256 tokenID, uint256 amount) returns(uint256)
+
+
+    /**
+     * @dev Creates an agreement hash for tokenID, with address addr
+     */
+    function createAgreementHash(uint256 tokenId, address addr)
 ```
 
 
@@ -165,7 +184,8 @@ cannot be sold.
 The NFT buyer or the marketplace selling the NFT places the buyer’s deposit and
 the buyer’s terms of sale “into” the Sales Contract (via buyProperty).  The
 terms of sale will include any required property walk-thrus, inspections,
-repairs, etc.
+repairs, etc. Buying also requires the owner to pass in a signed message agreeing
+to the terms of the house. This is found in nft.createAgreementHash(tokenID, buyerAddress).
 
 ### Executing
 
@@ -185,7 +205,7 @@ refundable deposits are returned to the buyer.
 ```
 listProperty(address nftContract, uint256 tokenId, address asset, uint256 price, uint256 time) returns(uint256)
 listPropertyBuyer(address nftContract, uint256 tokenId, address asset, uint256 price, uint256 time, address buyer) returns(uint256)
-buyProperty(uint256 listingId) 
+buyProperty(uint256 listingId, bytes agreement_signature) 
 execute(uint256 listingId)
 revertBuyer(uint256 listingId)
 revertSeller(uint256 listingId)
