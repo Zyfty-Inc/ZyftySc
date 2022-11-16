@@ -4,17 +4,32 @@ pragma solidity ^0.8.1;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 import "hardhat/console.sol";
 
 
 import "contracts/ZyftyNFT.sol";
 
-contract HomeToken is ERC20 {
+contract HomeToken is ERC20, Ownable {
+    constructor(string memory name, string memory symbol, uint256 totalSupply) ERC20(name, symbol) {
+        _mint(address(this), totalSupply);
+    }
+
+    function send(uint256 numberOfTokens, address buyer) public onlyOwner {
+        require(balanceOf(address(this)) >= numberOfTokens, "Not able to transfer, total Supply is messed up");
+        transfer(buyer, numberOfTokens);
+    }
+
+    // Send 0.5% on sell
+    // Not transferable outside zyfty
+
+
 }
 
-contract ZyftySalesContract is Ownable {
+contract TokenFactory is Ownable {
     using Counters for Counters.Counter;
+    using SafeMath for uint256;
     Counters.Counter private _propertyIds;
 
     struct ListedProperty {
@@ -25,6 +40,7 @@ contract ZyftySalesContract is Ownable {
         uint256 time; // Time until end
         uint256 tokensLeft;
         uint256 totalAssets;
+        address createdToken;
     }
 
     //      listingID   Property
@@ -33,16 +49,20 @@ contract ZyftySalesContract is Ownable {
     //      listingID            user       numTokens
     mapping (uint256 => mapping (address => uint256)) balances;
 
+    //      listingID   owners
+    mapping (uint256 => address[]) buyers;
+
     function listProperty(
             address seller,
             address asset,
+            uint256 numTokens,
             uint256 pricePer,
             uint256 time)
         public
         onlyOwner
         returns(uint256)
         {
-        require(nftContract != address(0), "ZyftySalesContract: NFT Contract is zero address");
+        require(seller != address(0), "Seller address must not be null");
         _propertyIds.increment();
         uint256 id =_propertyIds.current();
         propertyListing[id] = ListedProperty({
@@ -52,9 +72,9 @@ contract ZyftySalesContract is Ownable {
             created: block.timestamp,
             time: time,
             tokensLeft: numTokens,
-            totalAssets: numTokens
+            totalAssets: numTokens,
+            createdToken: address(0)
         });
-        emit E_PropertyListed(id);
         return id;
     }
 
@@ -68,21 +88,20 @@ contract ZyftySalesContract is Ownable {
         public
         withinWindow(id)
         {
+        // TODO Do we need a cotract hash?
         require(tokensLeft(id) == numberOfTokens, "Not enough tokens left");
         ListedProperty memory property = getProperty(id);
 
-        uint256 totalCost = property.pricePer*numberOfTokens;
-        ERC20 token = ERC20(property.asset)
+        uint256 totalCost = property.pricePer.mul(numberOfTokens);
+        ERC20 token = ERC20(property.asset);
 
         // Update balances
         token.transferFrom(msg.sender, address(this), totalCost);
+        if (balances[id][msg.sender] == 0) {
+            // First time purchasing
+            buyers[id].push(msg.sender);
+        }
         balances[id][msg.sender] += numberOfTokens;
-    }
-
-    function revertSeller(uint256 id)
-        public
-        afterWindow(id)
-        {
     }
 
     function revertBuyer(uint256 id)
@@ -91,12 +110,42 @@ contract ZyftySalesContract is Ownable {
         {
     }
 
-    function execute(uint256 id)
+    function cancelNow(uint256 id) public
+        withinWindow(id)
+        onlyOwner
+        {
+        
+        ListedProperty memory property = getProperty(id);
+        property.time = 0; // RESET to 0.
+        
+    }
+
+    function execute(uint256 id, string calldata symbol, string calldata name)
         public
         withinWindow(id)
+        returns(address)
         {
 
+        ListedProperty memory property = getProperty(id);
+        require(property.tokensLeft == 0, "Not all tokens purchased");
 
+        // TODO: Are we taking a fee?
+        // Send proceeds to the seller
+        ERC20 token = ERC20(property.asset);
+        uint256 totalOwed = property.totalAssets.mul(property.pricePer);
+        token.transfer(property.seller, totalOwed);
+
+        // Create ERC20 and mint to the buyers
+        // TOOD who will own the ERC20 contract?
+        HomeToken newERC20 = new HomeToken(name, symbol, property.totalAssets);
+        address[] memory toSend = buyers[id];
+        mapping(address => uint) storage addrToToken = balances[id];
+        for (uint i = 0; i < toSend.length; i++) {
+            address addr = toSend[i];
+            newERC20.send(addrToToken[addr], addr);
+        }
+        property.createdToken = address(newERC20);
+        // Update address
     }
 
     function cleanup(uint256 id) internal {
@@ -104,12 +153,12 @@ contract ZyftySalesContract is Ownable {
     }
 
     modifier withinWindow(uint256 id) {
-        require(propertyListing[id].created + propertyListing[id].time >= block.timestamp, "ZyftySalesContract: Window is closed");
+        require(propertyListing[id].created + propertyListing[id].time >= block.timestamp, "Window is closed");
         _;
     }
 
     modifier afterWindow(uint256 id) {
-        require(block.timestamp >= propertyListing[id].created + propertyListing[id].time, "ZyftySalesContract: Window is still open");
+        require(block.timestamp >= propertyListing[id].created + propertyListing[id].time, "Window is still open");
         _;
     }
 
@@ -124,5 +173,12 @@ contract ZyftySalesContract is Ownable {
     function owedTokens(uint256 id) public view returns(uint256) {
         return balances[id][msg.sender];
     }
+
+    function contractOf(uint256 id) public view returns(address) {
+        address token = propertyListing[id].createdToken;
+        require(token != address(0), "ERC20 contract not created");
+        return token;
+    }
+
 }
 
