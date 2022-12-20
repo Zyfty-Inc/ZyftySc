@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "./ERC4671/IERC4671.sol";
 
 import "hardhat/console.sol";
 
@@ -13,12 +14,11 @@ import "contracts/ZyftyNFT.sol";
 
 contract HomeToken is ERC20, Ownable {
     constructor(string memory name, string memory symbol, uint256 totalSupply) ERC20(name, symbol) {
-        _mint(address(this), totalSupply);
     }
 
     function send(uint256 numberOfTokens, address buyer) public onlyOwner {
-        require(balanceOf(address(this)) >= numberOfTokens, "Not able to transfer, total Supply is messed up");
-        transfer(buyer, numberOfTokens);
+        // TODO very dangerous
+        _mint(buyer, numberOfTokens);
     }
 
     // Send 0.5% on sell
@@ -43,6 +43,8 @@ contract TokenFactory is Ownable {
         address createdToken;
     }
 
+    address _kycContract;
+
     //      listingID   Property
     mapping (uint256 => ListedProperty) propertyListing;
 
@@ -51,6 +53,10 @@ contract TokenFactory is Ownable {
 
     //      listingID   owners
     mapping (uint256 => address[]) buyers;
+
+    constructor(address kycContract)  {
+        _kycContract = kycContract;
+    }
 
     function listProperty(
             address seller,
@@ -86,11 +92,12 @@ contract TokenFactory is Ownable {
      */
     function buyToken(uint256 id, uint256 numberOfTokens)
         public
+        isKYC
         withinWindow(id)
         {
         // TODO Do we need a cotract hash?
-        require(tokensLeft(id) == numberOfTokens, "Not enough tokens left");
-        ListedProperty memory property = getProperty(id);
+        require(tokensLeft(id) >= numberOfTokens, "Not enough tokens left");
+        ListedProperty storage property = propertyListing[id];
 
         uint256 totalCost = property.pricePer.mul(numberOfTokens);
         ERC20 token = ERC20(property.asset);
@@ -102,6 +109,7 @@ contract TokenFactory is Ownable {
             buyers[id].push(msg.sender);
         }
         balances[id][msg.sender] += numberOfTokens;
+        property.tokensLeft -=  numberOfTokens;
     }
 
     function revertBuyer(uint256 id)
@@ -122,11 +130,12 @@ contract TokenFactory is Ownable {
 
     function execute(uint256 id, string calldata symbol, string calldata name)
         public
+        isKYC
         withinWindow(id)
         returns(address)
         {
 
-        ListedProperty memory property = getProperty(id);
+        ListedProperty storage property = propertyListing[id];
         require(property.tokensLeft == 0, "Not all tokens purchased");
 
         // TODO: Are we taking a fee?
@@ -152,6 +161,49 @@ contract TokenFactory is Ownable {
         delete propertyListing[id];
     }
 
+    function getProperty(uint256 id) public view returns(ListedProperty memory) {
+        return propertyListing[id];
+    }
+
+    function tokensLeft(uint256 id) public view returns(uint256) {
+        return propertyListing[id].tokensLeft;
+    }
+
+    function pricePer(uint256 id) public view returns(uint256) {
+        return propertyListing[id].pricePer;
+    }
+
+    function owedTokens(uint256 id) public view returns(uint256) {
+        return balances[id][msg.sender];
+    }
+
+    function allProperties() public view returns(ListedProperty[] memory) {
+        uint256 id =_propertyIds.current();
+        ListedProperty[] memory properties = new ListedProperty[](id);
+        console.log("hi");
+        for (uint i = 1; i < id + 1; i++) {
+            console.log("hi");
+            ListedProperty memory prop = getProperty(i);
+            console.log(prop.tokensLeft);
+            properties[i-1] = prop;
+        }
+        return properties;
+    }
+
+    function contractOf(uint256 id) public view returns(address) {
+        address token = propertyListing[id].createdToken;
+        require(token != address(0), "ERC20 contract not created");
+        return token;
+    }
+
+    function setKYCcontract(address newAddress) public onlyOwner {
+        _kycContract = newAddress;
+    }
+
+    function kycContract() public view returns(address) {
+        return _kycContract;
+    }
+
     modifier withinWindow(uint256 id) {
         require(propertyListing[id].created + propertyListing[id].time >= block.timestamp, "Window is closed");
         _;
@@ -162,23 +214,11 @@ contract TokenFactory is Ownable {
         _;
     }
 
-    function getProperty(uint256 id) public view returns(ListedProperty memory) {
-        return propertyListing[id];
+    modifier isKYC() {
+        require(IERC4671(_kycContract).hasValid(msg.sender), "Access denied, not KYC verified");
+        _;
     }
 
-    function tokensLeft(uint256 id) public view returns(uint256) {
-        return propertyListing[id].tokensLeft;
-    }
-
-    function owedTokens(uint256 id) public view returns(uint256) {
-        return balances[id][msg.sender];
-    }
-
-    function contractOf(uint256 id) public view returns(address) {
-        address token = propertyListing[id].createdToken;
-        require(token != address(0), "ERC20 contract not created");
-        return token;
-    }
 
 }
 
