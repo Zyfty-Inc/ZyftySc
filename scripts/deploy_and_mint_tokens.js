@@ -6,12 +6,12 @@ async function main() {
     console.log(seller.address);
     console.log(buyer1.address);
     console.log(buyer2.address);
-    
+
     const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
     const KYC_FACTORY = await ethers.getContractFactory("ZyftyKYC")
     const ESCROW_FACTORY = await ethers.getContractFactory("TokenFactory");
     // Make all smart contracts
-    let tokenBalance = 300;
+    let tokenBalance = ethers.utils.parseUnits("300", "ether");
     let token = await TOKEN_FACTORY.deploy(seller.address, buyer1.address, buyer2.address, tokenBalance);
     let kyc = await KYC_FACTORY.deploy(zyftyAdmin.address, "ZyftyKYC", "ZKYC");
 
@@ -22,11 +22,13 @@ async function main() {
     // 2 days
     const time = 172800;
     for (let i = 1; i < 5; i++) {
+
+        let price = ethers.utils.parseUnits(pricesPer[i-1].toString(), "ether");
         await escrow.listProperty(
             seller.address,
             token.address,
             tokens,
-            pricesPer[i-1],
+            price,
             time, //time
         );
     }

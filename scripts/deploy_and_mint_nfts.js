@@ -1,4 +1,5 @@
 const hre = require("hardhat");
+const ethers = require("ethers");
 
 async function main() {
     let [seller, buyer, lien1P, zyftyAdmin] = await ethers.getSigners();
@@ -12,7 +13,7 @@ async function main() {
     console.log(seller.address)
     console.log(zyftyAdmin.address)
     // Make all smart contracts
-    let tokenBalance = 300;
+    let tokenBalance = ethers.utils.parseUnits(300, "ether");
     let token = await TOKEN_FACTORY.deploy(seller.address, buyer.address, lien1P.address, tokenBalance);
     let escrow = await ESCROW_FACTORY.deploy();
     let nft = await NFT_FACTORY.deploy(escrow.address);
@@ -53,11 +54,12 @@ async function main() {
     // List all 4 properties
     console.log("Putting properties for escrow");
     for (let i = 1; i < 5; i++) {
+        let price = ethers.utils.parseUnits(prices[i-1], "ether");
         r = await escrow.connect(seller).sellProperty(
-            nft.address, 
+            nft.address,
             i,  // tokenID
             token.address,
-            prices[i-1],  // price
+            price,  // price
             time, //time
         );
         await r.wait();
