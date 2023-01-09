@@ -4,6 +4,8 @@ pragma solidity ^0.8.1;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./ERC4671/IERC4671.sol";
 
@@ -122,10 +124,10 @@ contract TokenFactory is Ownable {
         withinWindow(id)
         onlyOwner
         {
-        
+
         ListedProperty memory property = getProperty(id);
         property.time = 0; // RESET to 0.
-        
+
     }
 
     function execute(uint256 id, string calldata symbol, string calldata name)
@@ -180,11 +182,8 @@ contract TokenFactory is Ownable {
     function allProperties() public view returns(ListedProperty[] memory) {
         uint256 id =_propertyIds.current();
         ListedProperty[] memory properties = new ListedProperty[](id);
-        console.log("hi");
         for (uint i = 1; i < id + 1; i++) {
-            console.log("hi");
-            ListedProperty memory prop = getProperty(i);
-            console.log(prop.tokensLeft);
+            ListedProperty storage prop = propertyListing[i];
             properties[i-1] = prop;
         }
         return properties;
@@ -204,13 +203,17 @@ contract TokenFactory is Ownable {
         return _kycContract;
     }
 
+    function isOpen(uint256 id) public view returns (bool) {
+        return propertyListing[id].created + propertyListing[id].time >= block.timestamp;
+    }
+
     modifier withinWindow(uint256 id) {
-        require(propertyListing[id].created + propertyListing[id].time >= block.timestamp, "Window is closed");
+        require(isOpen(id), "Window is closed");
         _;
     }
 
     modifier afterWindow(uint256 id) {
-        require(block.timestamp >= propertyListing[id].created + propertyListing[id].time, "Window is still open");
+        require(!isOpen(id), "Window is still open");
         _;
     }
 
