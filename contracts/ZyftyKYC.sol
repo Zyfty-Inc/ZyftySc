@@ -19,7 +19,7 @@ contract ZyftyKYC is Ownable, ERC4671 {
     }
 
     function mint(address owner) public onlyIssuer {
-        // TODO Will there be a chance to reissue if we 
+        // TODO Will there be a chance to reissue if we
         // explicilty revoked
         require(!hasValid(owner), "Can only issue a single valid token at a time");
         _mint(owner);
@@ -38,10 +38,6 @@ contract ZyftyKYC is Ownable, ERC4671 {
         _revoke(token);
     }
 
-    function _baseURI() internal pure virtual override returns (string memory) {
-        return "";
-    }
-
     modifier onlyIssuer() {
         require(
 
@@ -49,5 +45,9 @@ contract ZyftyKYC is Ownable, ERC4671 {
             "Access denied, not signed by _issuer"
         );
         _;
+    }
+
+    function _baseURI() internal pure virtual override returns (string memory) {
+        return "";
     }
 }

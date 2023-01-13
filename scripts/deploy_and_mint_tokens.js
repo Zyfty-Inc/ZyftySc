@@ -17,7 +17,7 @@ async function main() {
 
     let escrow = await ESCROW_FACTORY.deploy(kyc.address);
 
-    const tokens = 500;
+    const tokens = 400;
     let pricesPer = [5, 10, 15, 10]
     // 2 days
     const time = 172800;
