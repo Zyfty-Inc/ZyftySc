@@ -14,10 +14,14 @@ import "hardhat/console.sol";
 import "contracts/ZyftyNFT.sol";
 
 contract TestToken is ERC20 {
-    constructor(address b, address a, address c, uint256 amount) ERC20("TestToken", "TT"){
+    constructor(address b, address a, address c, uint256 amount) ERC20("Test Token", "TT"){
         _mint(b, amount);
         _mint(c, amount);
         _mint(a, amount);
+    }
+
+    function test_mint(address to) public {
+        _mint(to, 50);
     }
 }
 
@@ -86,20 +90,20 @@ contract ZyftySalesContract is Ownable {
         return id;
     }
 
-    function addBuyer(uint256 id, address buyer) 
-        public 
+    function addBuyer(uint256 id, address buyer)
+        public
         inState(id, EscrowState.INITIALIZED) // Can't add buyer in a non funded state
         withinWindow(id) {
-        
+
         require(propertyListing[id].seller == msg.sender, "ZyftySalesContract: You are not the seller");
         buyers[id][buyer] = true;
     }
 
-    function removeBuyer(uint256 id, address buyer) 
-        public 
+    function removeBuyer(uint256 id, address buyer)
+        public
         inState(id, EscrowState.INITIALIZED)
         withinWindow(id) {
-        
+
         require(propertyListing[id].seller == msg.sender, "ZyftySalesContract: You are not the seller");
         buyers[id][buyer] = false;
     }
