@@ -20,8 +20,8 @@ contract TestToken is ERC20 {
         _mint(a, amount);
     }
 
-    function test_mint(address to) public {
-        _mint(to, 50);
+    function test_mint(address to, uint256 value) public {
+        _mint(to, value);
     }
 }
 
