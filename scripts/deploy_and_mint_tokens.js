@@ -30,6 +30,7 @@ async function main() {
             tokens,
             price,
             time, //time
+            "I agree to the terms and conditions",
         );
     }
 

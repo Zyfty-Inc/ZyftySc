@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./ERC4671/IERC4671.sol";
 
 import "hardhat/console.sol";
@@ -32,6 +33,7 @@ contract HomeToken is ERC20, Ownable {
 contract TokenFactory is Ownable {
     using Counters for Counters.Counter;
     using SafeMath for uint256;
+    using ECDSA for bytes32;
     Counters.Counter private _propertyIds;
 
     struct ListedProperty {
@@ -43,6 +45,7 @@ contract TokenFactory is Ownable {
         uint256 tokensLeft;
         uint256 totalAssets;
         address createdToken;
+        string agreement;
     }
 
     address _kycContract;
@@ -65,7 +68,8 @@ contract TokenFactory is Ownable {
             address asset,
             uint256 numTokens,
             uint256 pricePer,
-            uint256 time)
+            uint256 time,
+            string memory agreement)
         public
         onlyOwner
         returns(uint256)
@@ -81,7 +85,8 @@ contract TokenFactory is Ownable {
             time: time,
             tokensLeft: numTokens,
             totalAssets: numTokens,
-            createdToken: address(0)
+            createdToken: address(0),
+            agreement: agreement
         });
         return id;
     }
@@ -92,12 +97,17 @@ contract TokenFactory is Ownable {
      * as the seller agrees to receive funds in the payment method
      * provided
      */
-    function buyToken(uint256 id, uint256 numberOfTokens)
+    function buyToken(uint256 id, uint256 numberOfTokens, bytes memory agreementSignature)
         public
         isKYC
         withinWindow(id)
         {
-        // TODO Do we need a cotract hash?
+        address signedAddress = createAgreementHash(id, msg.sender)
+                                    .toEthSignedMessageHash()
+                                    .recover(agreementSignature);
+
+        require(signedAddress == msg.sender, "ZyftyTokenFactory: Incorrect Agreement Signature");
+
         require(tokensLeft(id) >= numberOfTokens, "Not enough tokens left");
         ListedProperty storage property = propertyListing[id];
 
@@ -187,6 +197,17 @@ contract TokenFactory is Ownable {
             properties[i-1] = prop;
         }
         return properties;
+    }
+
+    /**
+     * @dev Creates an agreement hash for escrowId, with address addr
+     */
+    function createAgreementHash(uint256 escrowId, address addr)
+        public
+        view
+        returns(bytes32) {
+        string memory agreement = propertyListing[escrowId].agreement;
+        return keccak256(abi.encode(agreement, addr, escrowId, address(this)));
     }
 
     function contractOf(uint256 id) public view returns(address) {
