@@ -5,8 +5,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC1155/ERC1155Upgradeable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
 import "hardhat/console.sol";
@@ -14,8 +14,9 @@ import "hardhat/console.sol";
 import "./ERC4671/IERC4671.sol";
 
 contract ZyftyToken is ERC1155Upgradeable {
+    using Counters for Counters.Counter;
 
-    address minter
+    address minter;
 
     constructor() {
         _disableInitializers();
@@ -23,7 +24,6 @@ contract ZyftyToken is ERC1155Upgradeable {
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
 
     function initialize(address minter) initializer public {
@@ -35,7 +35,7 @@ contract ZyftyToken is ERC1155Upgradeable {
         minter = _minter;
     }
 
-    function newToken(address[] users, uint256[] amounts) public returns (uint256) {
+    function newToken(address[] memory users, uint256[] memory amounts) public returns (uint256) {
         require(minter == msg.sender, "must have minter role to mint");
 
         string memory uri = "https://api.zyfty.io/token/{id}.json";
@@ -45,7 +45,7 @@ contract ZyftyToken is ERC1155Upgradeable {
         for (uint256 i = 0; i < users.length; i++) {
             _mint(users[i], newItemId, amounts[i], "");
         }
-        _setTokenURI(newItemId, uri);
+        // _setTokenURI(newItemId, uri);
 
         return newItemId;
     }
@@ -55,7 +55,7 @@ contract ZyftyToken is ERC1155Upgradeable {
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC1155Upgradeable, AccessControlUpgradeable)
+        override(ERC1155Upgradeable)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
@@ -92,10 +92,12 @@ contract TokenFactory is Ownable {
         uint32 time; // Time to wait
         uint16 tokensLeft;
         uint16 totalAssets;
-        address createdToken;
         string agreement;
+        uint256 tokenId; // The ERC1155 tokenID could be 1-1 with the escrowID but is not guaranteed
+                         // for this reason we have this additional field added in.
     }
 
+    address _tokenContract;
     address _kycContract;
 
     //      listingID   Property
@@ -134,7 +136,7 @@ contract TokenFactory is Ownable {
             time: time,
             tokensLeft: numTokens,
             totalAssets: numTokens,
-            createdToken: address(0),
+            tokenId: 0, // 0 means does not exist
             agreement: agreement
         });
         return id;
@@ -174,6 +176,18 @@ contract TokenFactory is Ownable {
         property.tokensLeft -=  numberOfTokens;
     }
 
+    /**
+     * @dev Creates an agreement hash for escrowId, with address addr
+     */
+    function createAgreementHash(uint256 escrowId, address addr)
+        public
+        view
+        returns(bytes32) {
+        string memory agreement = propertyListing[escrowId].agreement;
+        return keccak256(abi.encode(agreement, addr, escrowId, address(this)));
+    }
+
+
     function revert(uint256 id)
         public
         afterWindow(id)
@@ -190,17 +204,7 @@ contract TokenFactory is Ownable {
         balances[id][msg.sender] = 0;
     }
 
-    function cancelNow(uint256 id) public
-        withinWindow(id)
-        onlyOwner
-        {
-
-        ListedProperty memory property = getProperty(id);
-        property.time = 0; // RESET to 0.
-
-    }
-
-    function execute(uint256 id, string calldata symbol, string calldata name)
+    function execute(uint256 id)
         public
         isKYC
         withinWindow(id)
@@ -210,23 +214,21 @@ contract TokenFactory is Ownable {
         ListedProperty storage property = propertyListing[id];
         require(property.tokensLeft == 0, "Not all tokens purchased");
 
-        // TODO: Are we taking a fee?
         // Send proceeds to the seller
+        // and collects fee
         ERC20 token = ERC20(property.asset);
         uint256 totalOwed = property.pricePer.mul(uint256(property.totalAssets));
-        token.transfer(property.seller, totalOwed);
+        token.transfer(property.seller, totalOwed - totalOwed/200);
+        token.transfer(owner(), totalOwed/200);
 
         // Create ERC20 and mint to the buyers
-        // TOOD who will own the ERC20 contract?
-        HomeToken newERC20 = new HomeToken(name, symbol, property.totalAssets);
-        address[] memory toSend = buyers[id];
-        mapping(address => uint) storage addrToToken = balances[id];
-        for (uint i = 0; i < toSend.length; i++) {
-            address addr = toSend[i];
-            newERC20.send(addrToToken[addr], addr);
+        uint256[] memory amounts = new uint256[](buyers[id].length);
+        for (uint i = 0; i < buyers[id].length; i++) {
+            // Get the balance of buyer i
+            amounts[i] = balances[id][buyers[id][i]];
         }
-        property.createdToken = address(newERC20);
-        // Update address
+        uint256 tokenId = ZyftyToken(_tokenContract).newToken(buyers[id], amounts);
+        property.tokenId = tokenId;
     }
 
     function cleanup(uint256 id) internal {
@@ -259,20 +261,9 @@ contract TokenFactory is Ownable {
         return properties;
     }
 
-    /**
-     * @dev Creates an agreement hash for escrowId, with address addr
-     */
-    function createAgreementHash(uint256 escrowId, address addr)
-        public
-        view
-        returns(bytes32) {
-        string memory agreement = propertyListing[escrowId].agreement;
-        return keccak256(abi.encode(agreement, addr, escrowId, address(this)));
-    }
-
-    function contractOf(uint256 id) public view returns(address) {
-        address token = propertyListing[id].createdToken;
-        require(token != address(0), "ERC20 contract not created");
+    function tokenId(uint256 escrowId) public view returns(uint256) {
+        uint256 token = propertyListing[escrowId].tokenId;
+        require(token != 0, "Token not created");
         return token;
     }
 

@@ -11,5 +11,8 @@
     "hardhat": "^2.9.2",
     "solc": "^0.8.14",
     "solidity-coverage": "^0.7.20"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts-upgradeable": "^4.8.1"
   }
 }
