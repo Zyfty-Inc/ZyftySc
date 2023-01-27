@@ -127,5 +127,21 @@ describe("TokenFactory", function () {
         await this.buyer2Conn.buyToken(this.id, this.tokens/2, sig)
     });
 
+    it("Allows the user to revert the transaction", async function() {
+        let sig = await createHash(this.escrow, this.buyer1, this.id);
+
+        // Buy half
+        await this.buyer1Conn.buyToken(this.id, this.tokens/2, sig);
+        await expect(this.buyer1Conn.revert(this.id))
+            .to.be.revertedWith("Window is still open");
+        await sleep(this.time*1000 + 1000);
+
+        await this.buyer1Conn.revert(this.id);
+        expect(await this.token.balanceOf(this.buyer1.address)).to.equal(this.tokenBalance);
+
+        await expect(this.buyer1Conn.revert(this.id))
+            .to.be.revertedWith("No tokens purchased");
+    });
+
 });
 

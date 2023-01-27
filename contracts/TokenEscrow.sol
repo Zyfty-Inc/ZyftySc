@@ -15,6 +15,16 @@ import "hardhat/console.sol";
 
 import "contracts/ZyftyNFT.sol";
 
+contract ZyftyToken is ERC1155, Ownable {
+
+    constructor() public ERC1155("https://api.zyfty.io/token/{id}.json") {
+    }
+
+    function mint(address account, uint256 id, uint256 amount) public onlyOwner {
+        _mint(account, id, amount, "");
+    }
+}
+
 contract HomeToken is ERC20, Ownable {
     constructor(string memory name, string memory symbol, uint256 totalSupply) ERC20(name, symbol) {
     }
@@ -40,10 +50,10 @@ contract TokenFactory is Ownable {
         address seller; // The person who gets the funds post sell
         address asset;
         uint256 pricePer;
-        uint256 created; // Created time
-        uint256 time; // Time until end
-        uint256 tokensLeft;
-        uint256 totalAssets;
+        uint48 created; // Created time
+        uint32 time; // Time to wait
+        uint16 tokensLeft;
+        uint16 totalAssets;
         address createdToken;
         string agreement;
     }
@@ -66,9 +76,9 @@ contract TokenFactory is Ownable {
     function listProperty(
             address seller,
             address asset,
-            uint256 numTokens,
+            uint16 numTokens,
             uint256 pricePer,
-            uint256 time,
+            uint32 time,
             string memory agreement)
         public
         onlyOwner
@@ -77,11 +87,12 @@ contract TokenFactory is Ownable {
         require(seller != address(0), "Seller address must not be null");
         _propertyIds.increment();
         uint256 id =_propertyIds.current();
+
         propertyListing[id] = ListedProperty({
             seller: seller,
             asset: asset,
             pricePer: pricePer,
-            created: block.timestamp,
+            created: uint32(block.timestamp % 2**32),
             time: time,
             tokensLeft: numTokens,
             totalAssets: numTokens,
@@ -97,7 +108,7 @@ contract TokenFactory is Ownable {
      * as the seller agrees to receive funds in the payment method
      * provided
      */
-    function buyToken(uint256 id, uint256 numberOfTokens, bytes memory agreementSignature)
+    function buyToken(uint256 id, uint16 numberOfTokens, bytes memory agreementSignature)
         public
         isKYC
         withinWindow(id)
@@ -112,6 +123,7 @@ contract TokenFactory is Ownable {
         ListedProperty storage property = propertyListing[id];
 
         uint256 totalCost = property.pricePer.mul(numberOfTokens);
+        // TODO would we need to support erc1155 tokens also?
         ERC20 token = ERC20(property.asset);
 
         // Update balances
@@ -124,10 +136,20 @@ contract TokenFactory is Ownable {
         property.tokensLeft -=  numberOfTokens;
     }
 
-    function revertBuyer(uint256 id)
+    function revert(uint256 id)
         public
         afterWindow(id)
         {
+
+        uint256 numberOfTokens = balances[id][msg.sender];
+        require(numberOfTokens > 0, "No tokens purchased");
+
+        ListedProperty storage property = propertyListing[id];
+
+        uint256 totalCost = property.pricePer.mul(uint256(numberOfTokens));
+        ERC20 token = ERC20(property.asset);
+        token.transfer(msg.sender, totalCost);
+        balances[id][msg.sender] = 0;
     }
 
     function cancelNow(uint256 id) public
@@ -153,7 +175,7 @@ contract TokenFactory is Ownable {
         // TODO: Are we taking a fee?
         // Send proceeds to the seller
         ERC20 token = ERC20(property.asset);
-        uint256 totalOwed = property.totalAssets.mul(property.pricePer);
+        uint256 totalOwed = property.pricePer.mul(uint256(property.totalAssets));
         token.transfer(property.seller, totalOwed);
 
         // Create ERC20 and mint to the buyers
