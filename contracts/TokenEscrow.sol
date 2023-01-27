@@ -5,25 +5,63 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC1155/ERC1155Upgradeable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "./ERC4671/IERC4671.sol";
-
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
 import "hardhat/console.sol";
 
+import "./ERC4671/IERC4671.sol";
 
-import "contracts/ZyftyNFT.sol";
+contract ZyftyToken is ERC1155Upgradeable {
 
-contract ZyftyToken is ERC1155, Ownable {
+    address minter
 
-    constructor() public ERC1155("https://api.zyfty.io/token/{id}.json") {
+    constructor() {
+        _disableInitializers();
     }
 
-    function mint(address account, uint256 id, uint256 amount) public onlyOwner {
-        _mint(account, id, amount, "");
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    function initialize(address minter) initializer public {
+        __ERC1155_init("https://api.zyfty.io/token/{id}.json");
+        setMinter(minter);
+    }
+
+    function setMinter(address _minter) public {
+        minter = _minter;
+    }
+
+    function newToken(address[] users, uint256[] amounts) public returns (uint256) {
+        require(minter == msg.sender, "must have minter role to mint");
+
+        string memory uri = "https://api.zyfty.io/token/{id}.json";
+        _tokenIds.increment();
+
+        uint256 newItemId = _tokenIds.current();
+        for (uint256 i = 0; i < users.length; i++) {
+            _mint(users[i], newItemId, amounts[i], "");
+        }
+        _setTokenURI(newItemId, uri);
+
+        return newItemId;
+    }
+
+    // The following functions are overrides required by Solidity.
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC1155Upgradeable, AccessControlUpgradeable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }
+
 
 contract HomeToken is ERC20, Ownable {
     constructor(string memory name, string memory symbol, uint256 totalSupply) ERC20(name, symbol) {
