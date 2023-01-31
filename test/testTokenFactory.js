@@ -1,5 +1,5 @@
 const { expect } = require("chai");
-const { ethers } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
 const hre = require('hardhat');
 const { calcEthereumTransactionParams } = require("@acala-network/eth-providers")
 
@@ -40,9 +40,12 @@ describe("TokenFactory", function () {
             signer: this.zyftyAdmin, // set the zyftyAdmin as the owner on deploy
         });
         const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
-        this.HOME_TOKEN_FACTORY = await ethers.getContractFactory("HomeToken");
+        const ZyftyToken = await ethers.getContractFactory("ZyftyToken");
 
-        this.escrow = await ESCROW_FACTORY.deploy(this.kyc.address);
+        this.zyftyToken = await upgrades.deployProxy(ZyftyToken, [this.zyftyAdmin.address]);
+
+        this.escrow = await ESCROW_FACTORY.deploy(this.kyc.address, this.zyftyToken.address);
+        this.zyftyToken.setMinter(this.escrow.address);
 
         // Create two assets, one for selling one for liens
         this.token = await TOKEN_FACTORY.deploy(this.buyer1.address, this.buyer2.address, this.buyer3.address, this.tokenBalance);
@@ -82,15 +85,14 @@ describe("TokenFactory", function () {
         await this.buyer1Conn.buyToken(this.id, 3*this.tokens/4, sig);
         expect(await this.token.balanceOf(this.buyer1.address)).to.equal(this.tokenBalance - pricePaid);
 
-        await expect(this.buyer1Conn.execute(this.id, "SYM", "HOMETOKEN")).to.be.revertedWith('Not all tokens purchased');
+        await expect(this.buyer1Conn.execute(this.id)).to.be.revertedWith('Not all tokens purchased');
         sig = await createHash(this.escrow, this.buyer2, this.id);
         await this.buyer2Conn.buyToken(this.id, this.tokens/4, sig);
-        await this.buyer1Conn.execute(this.id, "SYM", "HOMETOKEN")
+        await this.buyer1Conn.execute(this.id)
 
-        const tokenAddress = this.escrow.contractOf(this.id);
-        const token = this.HOME_TOKEN_FACTORY.attach(tokenAddress)
-        expect(await token.balanceOf(this.buyer1.address)).to.equal(3*this.tokens/4);
-        expect(await token.balanceOf(this.buyer2.address)).to.equal(this.tokens/4);
+        const tokenId = this.escrow.tokenId(this.id);
+        expect(await this.zyftyToken.balanceOf(this.buyer1.address, tokenId)).to.equal(3*this.tokens/4);
+        expect(await this.zyftyToken.balanceOf(this.buyer2.address, tokenId)).to.equal(this.tokens/4);
     });
 
     it("Disallows non KYCd tokens unless they get KYcd", async function() {
