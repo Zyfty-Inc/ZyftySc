@@ -231,6 +231,4 @@ contract TokenFactory is Ownable {
         _;
     }
 
-
 }
-
