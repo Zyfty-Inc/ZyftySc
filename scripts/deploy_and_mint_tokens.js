@@ -7,6 +7,10 @@ async function main() {
     console.log(buyer1.address);
     console.log(buyer2.address);
 
+    const ZyftyToken = await ethers.getContractFactory("ZyftyToken");
+
+    const zyftyToken = await upgrades.deployProxy(ZyftyToken, [zyftyAdmin.address]);
+
     const TOKEN_FACTORY = await ethers.getContractFactory("TestToken");
     const KYC_FACTORY = await ethers.getContractFactory("ZyftyKYC")
     const ESCROW_FACTORY = await ethers.getContractFactory("TokenFactory");
@@ -15,7 +19,8 @@ async function main() {
     let token = await TOKEN_FACTORY.deploy(seller.address, buyer1.address, buyer2.address, tokenBalance);
     let kyc = await KYC_FACTORY.deploy(zyftyAdmin.address, "ZyftyKYC", "ZKYC");
 
-    let escrow = await ESCROW_FACTORY.deploy(kyc.address);
+    let escrow = await ESCROW_FACTORY.deploy(kyc.address, zyftyToken.address);
+    zyftyToken.setMinter(escrow.address);
 
     const tokens = 400;
     let pricesPer = [5, 10, 15, 10]

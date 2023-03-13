@@ -27,6 +27,14 @@ contract ZyftyToken is ERC1155Upgradeable {
         escrow = _escrow;
     }
 
+    /**
+     * Mints a New ZyftyHome token with the given users and amounts
+     *
+     * @param users The users to mint tokens for
+     * @param amounts The amounts of tokens to mint for each user
+     *
+     * @return The token id of the newly minted token
+     */
     function newToken(address[] memory users, uint256[] memory amounts) public returns (uint256) {
         require(minter == msg.sender, "must have minter role to mint");
         require(users.length == amounts.length, "Users and Amounts must be same length");
@@ -44,8 +52,9 @@ contract ZyftyToken is ERC1155Upgradeable {
         return newItemId;
     }
 
-    // The following functions are overrides required by Solidity.
-
+    /**
+     * Requried override for solidity
+     */
     function supportsInterface(bytes4 interfaceId)
         public
         view
@@ -55,6 +64,9 @@ contract ZyftyToken is ERC1155Upgradeable {
         return super.supportsInterface(interfaceId);
     }
 
+    /**
+     * Lock transfers to the escrow address
+     */
     function _beforeTokenTransfer(
         address operator,
         address from,

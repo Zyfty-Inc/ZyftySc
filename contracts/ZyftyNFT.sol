@@ -273,7 +273,7 @@ contract ZyftyNFT is ERC721, Ownable {
         address from,
         address to,
         uint256 id
-    ) internal override {
+    ) internal {
         // Require that this can only be transfered via the escrow contract
         require(from == address(0) || to == address(0) || from == escrow || to == escrow, "Token must be passed through Sales Contract");
         // Check if locked, exception is if to is address(0) for burns

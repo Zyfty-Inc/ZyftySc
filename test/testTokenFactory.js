@@ -145,7 +145,7 @@ describe("TokenFactory", function() {
             .to.be.revertedWith("No tokens purchased");
     });
 
-    it("Disables token transfer of tokens", async function() {
+    it("Disables token transfer to non aproved KYC contracts", async function() {
 
         let sig = await createHash(this.escrow, this.buyer1, this.id);
         await this.buyer1Conn.buyToken(this.id, 3 * this.tokens / 4, sig);
